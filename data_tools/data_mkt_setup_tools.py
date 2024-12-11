@@ -38,7 +38,7 @@ class MktDataSetup:
             temp_df = pd.read_csv(f'{self.ph.setup_params.data_loc}\\{sec}_{data_end}')
             temp_df = gt.convert_date_to_dt(temp_df)
 
-            daily_temp = temp_df[['DateTime', 'Open', 'High', 'Low', 'Close', 'Vol', 'OpenInt']]
+            daily_temp = temp_df[['DateTime', 'Open', 'High', 'Low', 'Close', 'Vol']]
 
             if sec == self.ph.setup_params.security:
                 self.security_df = daily_temp.copy(deep=True)
@@ -69,6 +69,7 @@ class MktDataWorking:
 
         self.prep_working_data('daily')
         self.prep_working_data('intraday')
+        self.subset_start_time()
 
     def prep_working_data(self, time_frame):
         print(f'Prepping Working Data: {time_frame} ')
@@ -87,6 +88,7 @@ class MktDataWorking:
             df = prep_ema(df, sec, self.fastema)
             df = mt.add_high_low_diff(df, sec)
             df = self.frac_diff(df, sec)
+            df = mt.garch_modeling(df, sec)
 
         df = mt.encode_time_features(df, time_frame)
         df = gt.fill_na_inf(df)
@@ -97,7 +99,7 @@ class MktDataWorking:
             self.intra_working = df
 
     def frac_diff(self, df, sec):
-        for met in ['Open', 'High', 'Low', 'Close', 'Vol', 'OpenInt']:
+        for met in ['Open', 'High', 'Low', 'Close', 'Vol']:
             d_val, ws = self.get_frac_diff_params(met, sec)
 
             ws = min(ws, 450)
@@ -128,6 +130,22 @@ class MktDataWorking:
             [(self.ph.param_chooser.valid_param_df['paramset_id'] == self.ph.paramset_id) &
              (self.ph.param_chooser.valid_param_df['side'] == self.ph.side)]).reset_index(drop=True)
         self.fastema = int(param_id_df.loc[0, 'fastEmaLen'])
+
+    def subset_start_time(self):
+        start_time = (
+            pd.Timestamp(f'{self.ph.setup_params.start_hour:02}:{self.ph.setup_params.start_minute:02}:00').time())
+
+        self.intra_working['time'] = self.intra_working['DateTime'].dt.time
+        subset_df = self.intra_working[
+            (self.intra_working['time'] >= start_time) &
+            (self.intra_working['time'] <= pd.Timestamp('16:00:00').time())]
+        self.intra_working = subset_df.drop(columns=['time'])
+
+        self.intra_working['time'] = self.intra_working['DateTime'].dt.time
+        subset_df = self.intra_working[
+            (self.intra_working['time'] >= start_time) &
+            (self.intra_working['time'] <= pd.Timestamp('16:00:00').time())]
+        self.intra_working = subset_df.drop(columns=['time'])
 
 
 def prep_ema(df, sec, ema_len):

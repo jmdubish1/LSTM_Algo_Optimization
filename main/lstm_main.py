@@ -5,9 +5,10 @@ from nn_tools.process_handler import ProcessHandler
 from data_tools.data_mkt_setup_tools import MktDataSetup, MktDataWorking
 from analysis_tools.param_chooser import AlgoParamResults
 from data_tools.data_trade_tools import TradeData
-from nn_tools.model_tools import LstmOptModel
+from nn_tools.basic_lstm_model_tools import LstmOptModel
 from data_tools.data_prediction_tools import ModelOutputData
 from nn_tools.save_handler import SaveHandler
+from data_tools.data_mkt_lstm_tools import LstmData
 
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -22,8 +23,8 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 setup_dict = {
+    'model_type': 'mdn_lstm',
     'strategy': 'Double_Candle',
-    'model_type': 'LSTM',
     'security': 'NQ',
     'other_securities': ['RTY', 'YM'], #'RTY', 'ES', 'YM', 'GC', 'CL'],
     'sides': ['Bull'],
@@ -34,7 +35,7 @@ setup_dict = {
     'trade_dat_loc': r'C:\Users\jmdub\Documents\Trading\Futures\Strategy Info\Double_Candles\ATR',
     'start_train_date': '2010-04-01',
     'final_test_date': '2024-04-01',
-    'start_hour': 6,
+    'start_hour': 7,
     'start_minute': 30,
     'test_period_days': 7*13,
     'years_to_train': 3,
@@ -45,21 +46,22 @@ setup_dict = {
 }
 
 lstm_model_dict = {
-    'period_lookback': 12,
-    'plot_live': False,
-    'epochs': {'Bull': 150,
-               'Bear': 150},
-    'batch_size': 32,
+    'intra_lookback': 18,
+    'daily_lookback': 24,
+    'plot_live': True,
+    'epochs': {'Bull': 250,
+               'Bear': 250},
+    'batch_size': 16,
     'max_accuracy': .96,
-    'lstm_i1_nodes': 48,
-    'lstm_i2_nodes': 32,
-    'dense_m1_nodes': 32,
+    'lstm_i1_nodes': 24,
+    'lstm_i2_nodes': 20,
+    'dense_m1_nodes': 20,
     'dense_wl1_nodes': 12,
     'dense_pl1_nodes': 12,
     'adam_optimizer': .00005,
     'prediction_runs': 1,
-    'opt_threshold': {'Bull': .40,
-                      'Bear': .40},
+    'opt_threshold': {'Bull': .50,
+                      'Bear': .50},
     'temperature': {'Bull': 1.0,
                     'Bear': 1.0}
 }
@@ -68,7 +70,7 @@ train_dict = {
     'predict_tf': True,
     'retrain_tf': False,
     'use_prev_period_model': True,
-    'train_bad_params': True
+    'train_bad_params': False
 }
 
 def main():
@@ -78,7 +80,7 @@ def main():
     train_bad_params = train_dict['train_bad_params']
 
     ph = ProcessHandler(setup_params=setup_dict)
-    mkt_data = MktDataSetup(ph)
+    MktDataSetup(ph)
     save_handler = SaveHandler(ph)
     param_chooser = AlgoParamResults(ph)
     param_chooser.run_param_chooser()
@@ -87,21 +89,29 @@ def main():
         trade_data = TradeData(ph)
         valid_params = param_chooser.valid_param_list(train_bad_params)
 
-        for ph.paramset_id in valid_params[0]:
-            mktdata_working = MktDataWorking(ph)
-            lstm_model = LstmOptModel(ph, lstm_model_dict)
-            model_output_data = ModelOutputData(ph)
+        for ph.paramset_id in valid_params[0:1]:
+            MktDataWorking(ph)
+            LstmOptModel(ph, lstm_model_dict)
+            ModelOutputData(ph)
 
             print(f'Testing Dates: \n'
                   f'...{ph.test_dates}')
-            for i in range(len(ph.test_dates)):
-                test_date = ph.test_dates[i]
-                trade_data.separate_train_test(ph)
+            for ind, test_date in enumerate(ph.test_dates):
+                trade_data.set_dates(test_date)
+                lstm_data = LstmData(ph)
                 trade_data.create_working_df()
-                save_handler.set_model_train_paths(test_date)
-                trade_data.separate_train_test(test_date)
+                save_handler.set_model_train_paths()
+                trade_data.separate_train_test()
 
-                ph.decide_model_to_train()
+                ph.decide_model_to_train(test_date, use_prev_period_model)
+                ph.decide_load_prior_model()
+                load_scalers = ph.decide_load_scalers()
+                ph.lstm_model.modify_op_threshold_temp(ind, mod_thres=True)
+
+                if ph.train_modeltf:
+                    lstm_data.prep_train_test_data(load_scalers)
+                    param_chooser.adj_lstm_training_nodes()
+                    ph.ph_train_model(ind)
 
 
 

@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
 from fracdiff import fdiff
+from fracdiff.sklearn import FracdiffStat
 import glob
 
 
@@ -33,7 +34,7 @@ def adf_d_FFD_matrix(arr, window_size=50, d_list=None):
     tries = 0
     while last_adf > adf_crit and tries < len(d_list):
         for d in d_list:
-            test_arr = fdiff(arr, d, window=window_size, mode='valid')
+            test_arr = fdiff(arr, d, window=window_size, mode='same')
             test_arr = subset_to_first_nonzero(test_arr)
             padding = len(arr) - len(test_arr)
             test_arr = test_arr[~np.isnan(test_arr)]
@@ -121,7 +122,7 @@ def plot_adf_test(adf_data, save_name):
     plt.close(fig)
 
 
-def plot_frac_FFD(test_arrs, df, save_loc):
+def plot_frac_FFD(test_arrs, df, save_loc, plot_name):
     arr = df['Close'].values
     dates = pd.to_datetime(df['Date']).values
     for data_array in test_arrs:
@@ -152,12 +153,55 @@ def plot_frac_FFD(test_arrs, df, save_loc):
 
         plt.title(f'd: {d}')
         plt.tight_layout()
-        save_name = f'{save_loc}\\diff_graph_d{d: .1f}.png'
+        save_name = f'{save_loc}\\plots\\{plot_name}.png'
         plt.savefig(save_name)
         plt.close(fig)
 
 
-def build_optimal_d_windows(arr, window_arr):
+def plot_best_ffd_params(save_loc, df, arr, sec_, time_f, test_c):
+    ffd_df = pd.read_excel(f'{save_loc}\\all_FFD_params.xlsx')
+
+    test_params = ffd_df[(ffd_df['Data'] == test_c) &
+                         (ffd_df['security'] == sec_) &
+                         (ffd_df['time_frame'] == time_f)]
+
+    d = test_params['d_val'].values[0]
+    ws = test_params['window'].values[0]
+    w_df = fdiff(arr, d, window=ws, mode='same')
+
+    dates = pd.to_datetime(df['Date']).values
+    plot_name = f'{sec_}_{time_f}_{test_c}'
+    valid_idx = len(dates) - len(w_df) + 1
+    x = dates[valid_idx:]
+    y1 = arr[valid_idx:]
+    y2 = w_df[1:]
+    y2_avg = np.nanmean(y2)
+
+    fig, ax1 = plt.subplots()
+    ax1.plot(x, y1, 'b-', label='Vol - Real')
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Vol - Real', color='blue')
+    ax1.tick_params(axis='y', labelcolor='blue')
+    ax1.legend(loc='upper left')
+
+    ax2 = ax1.twinx()
+    ax2.spines['right'].set_position(('outward', 60))
+
+    ax2.plot(x, y2, 'r-', label='Vol - FracDiff')
+    ax2.axhline(y2_avg, color='green', linestyle='--', label=f'y2 avg = {y2_avg:.2f}')
+    ax2.set_ylabel('Vol - FracDiff', color='darkred')
+    ax2.tick_params(axis='y', labelcolor='darkred')
+    ax2.legend(loc='upper right')
+
+    plt.title(f'd: {d: .3f}\n'
+              f'window: {ws}')
+    plt.tight_layout()
+    save_name = f'{save_loc}\\plots\\{plot_name}.png'
+    plt.savefig(save_name)
+    plt.close(fig)
+
+
+def build_optimal_d_windows(arr, window_arr, test_col):
     final_ds = []
     for window in window_arr:
         print(window)
@@ -165,18 +209,24 @@ def build_optimal_d_windows(arr, window_arr):
         adf_data = organize_adf_data(adf_data)
 
         adf_vals = adf_data['adf_val'].values
-        crit_val = adf_data.at[0, 'critical_vals']['5%']
+        crit_val = adf_data.at[0, 'critical_vals']['1%']
         best_ind = np.argmax(adf_vals < crit_val)
-        if best_ind > 0:
-            best_d_val = adf_data.loc[best_ind - 1, 'd_val']
-            new_test_ds = [best_d_val + i/100 for i in range(11)]
-            adf_data2, _ = adf_d_FFD_matrix(arr, window_size=window, d_list=new_test_ds)
-            adf_data2 = organize_adf_data(adf_data2)
-            final_d_ind = np.argmax(adf_data2['adf_val'].values < crit_val)
-            final_d = adf_data2.iloc[final_d_ind]
-            final_d['window'] = window
 
-            final_ds.append(final_d)
+        if best_ind == 0 and test_col == 'Close':
+            continue
+        elif best_ind > 0:
+            best_d_val = adf_data.loc[best_ind - 1, 'd_val']
+            new_test_ds = [best_d_val + i / 100 for i in range(11)]
+        else:
+            new_test_ds = [.01 + i / 100 for i in range(10)]
+
+        adf_data2, _ = adf_d_FFD_matrix(arr, window_size=window, d_list=new_test_ds)
+        adf_data2 = organize_adf_data(adf_data2)
+        final_d_ind = np.argmax(adf_data2['adf_val'].values < crit_val)
+        final_d = adf_data2.iloc[final_d_ind]
+        final_d['window'] = window
+
+        final_ds.append(final_d)
 
     final_ds = pd.concat(final_ds, axis=1).T
     final_ds.reset_index(inplace=True)
@@ -184,15 +234,15 @@ def build_optimal_d_windows(arr, window_arr):
     return final_ds
 
 
-def find_optimal_d(arr, weight_stats, window_arr, min_corr):
-    final_ds = build_optimal_d_windows(arr, window_arr)
-    final_ds = score_d_corr(final_ds, weight_stats, min_corr)
+def find_optimal_d(arr, weight_stats, window_arr, test_col):
+    final_ds = build_optimal_d_windows(arr, window_arr, test_col)
+    final_ds = score_d_corr(final_ds, weight_stats)
     optimal_d_window = final_ds.iloc[np.argmax(final_ds['d_corr_score'].values)]
 
     return optimal_d_window
 
 
-def score_d_corr(adf_data, weights_stats, min_corr):
+def score_d_corr(adf_data, weights_stats):
     w1 = weights_stats['w_corr']
     w2 = weights_stats['w_d']
     scores = []
@@ -200,8 +250,8 @@ def score_d_corr(adf_data, weights_stats, min_corr):
         corr = row['corr']
         adf_stat = row['adf_val']
         d_val = row['d_val']
-        score = ((w1 * (1 - (min_corr - corr)) + w2 * (1 - d_val)) *
-                 (1 if adf_stat <= row['critical_vals']['1%'] else 0) * (1 if d_val >= .2 else 0))
+        score = ((w1 * (1 - (1 - corr)) + w2 * (1 - d_val)) *
+                 (1 if adf_stat <= row['critical_vals']['1%'] else 0) * (1 if d_val > .1 else .75))
         scores.append(score)
     adf_data['d_corr_score'] = scores
 
@@ -231,104 +281,106 @@ def load_prep_data(data_loc, data_end):
     return df
 
 
+def save_best_params(best_param, sec_, time_f, test_c, save_loc):
+    best_param = pd.DataFrame(best_param).T
+    best_param['security'] = sec_
+    best_param['time_frame'] = time_f
+    best_param['Data'] = test_c
+
+    col_start = ['security', 'time_frame', 'Data']
+    col_order = col_start + [col for col in best_param.columns if col not in col_start]
+    best_param = best_param[col_order]
+
+    bp_save = f'{save_loc}\\all_FFD_params.xlsx'
+    if os.path.exists(bp_save):
+        temp_df = pd.read_excel(bp_save)
+        cond = ((temp_df['security'] == sec_) &
+                (temp_df['time_frame'] == time_f) &
+                (temp_df['Data'] == test_c))
+        if cond.any():
+            temp_df.iloc[cond] = best_param.iloc[0]
+        else:
+            temp_df = pd.concat([temp_df, best_param], ignore_index=True)
+        temp_df.to_excel(bp_save, index=False)
+    else:
+        best_param.to_excel(bp_save, index=False)
+
+
 def main():
     data_loc = r'C:\Users\jmdub\Documents\Trading\Futures\Strategy Info\data'
     strat_loc = r'C:\Users\jmdub\Documents\Trading\Futures\Strategy Info\Double_Candles\ATR'
     save_loc = f'{strat_loc}\\agg_data'
-    securities = ['NQ', 'GC', 'CL', 'NQ', 'RTY', 'ES', 'YM']
-    time_frames = ['daily']  #, '15min', '5min']
+    securities = ['NQ', 'GC', 'CL', 'RTY', 'ES', 'YM']
+    time_frames = ['daily', '15min', '5min']
 
     cpi_file = f'{data_loc}\\inflation_adjusted\\CPIAUCSL_seasonally_adj.xlsx'
     cpi_df = pd.read_excel(cpi_file, sheet_name='Total_inflation')
     cpi_df['observation_date'] = pd.to_datetime(cpi_df['observation_date'])
 
-    weights = {'w_corr': .85,
-               'w_d': .15}
+    weights = {'w_corr': .9,
+               'w_d': .1}
 
-    min_corr_dict = {'Close': .9,
-                     'Vol': .9,
-                     'OpenInt': .9}
+    window_dict = {'Close': list(range(25, 126, 25)),
+                   'Vol':  list(range(15, 26, 5)),
+                   'OpenInt': list(range(15, 26, 5))}
 
-    window_dict = {'Close': list(range(8, 25, 2)) + list(range(25, 100, 5)) + list(range(100, 1001, 25)),
-                   'Vol': list(range(4, 41, 2)),
-                   'OpenInt': list(range(4, 41, 2))}
-
-    save_plots = False
+    plot_opt_window = False
+    plot_opt_d = False
+    optimize_d_window = True
 
     for sec in securities:
         for timef in time_frames:
             data_end = f'{sec}_{timef}_20240505_20040401.txt'
             df = load_prep_data(data_loc, data_end)
-            best_params = []
-            for test_col in ['Close']:
-                min_corr = min_corr_dict[test_col]
+
+            # threshold = df['OpenInt'].quantile(0.50)
+            # df['OpenInt'] = df['OpenInt'].where(df['OpenInt'] < threshold, 250000)
+            # # df['OpenInt'].shift(5)
+            # df['OpenInt'] = df['OpenInt'].fillna(df['OpenInt'].iloc[0:5])
+
+            for test_col in ['Close', 'Vol']:
+
                 windows = window_dict[test_col]
                 print(f'{sec} : {timef}: {test_col}')
-                # save_loc = f'{save_loc}\\working folder\\fraction_diff_{test_col}'
                 os.makedirs(save_loc, exist_ok=True)
 
-                work_list = {'as_is': [False, False]}
+                inflate = False
+                log_scale = False
 
-                for key, val in work_list.items():
-                    log_scale = val[0]
-                    inflate = val[1]
+                if inflate:
+                    df = adjust_for_inflation(df, cpi_df, test_col)
 
-                    if inflate:
-                        df = adjust_for_inflation(df, cpi_df, test_col)
+                arr = df[test_col].values
 
-                    arr = df[test_col].values
+                # if sec in ['NQ', 'YM', 'ES', 'RTY']:
+                #     arr = np.log(arr)
 
-                    if log_scale:
-                        arr = np.log(arr)
+                if optimize_d_window:
+                    if sec in ['GC', 'CL']:
+                        windows = list(range(11, 21, 2))
 
-                    best_param = find_optimal_d(arr, weight_stats=weights, window_arr=windows, min_corr=min_corr)
-                    best_param['Data'] = test_col
-                    best_params.append(best_param)
+                    best_param = find_optimal_d(arr, weight_stats=weights, window_arr=windows, test_col=test_col)
+                    save_best_params(best_param, sec, timef, test_col, save_loc)
 
-                if save_plots:
+                if plot_opt_window:
                     for ws in windows:
-                        print(f'{key}: {ws}')
+                        print(f'{ws}')
                         d_list = np.linspace(0, 1, 21)
                         adf_data, test_arrs = adf_d_FFD_matrix(arr, window_size=ws, d_list=d_list)
                         adf_data = organize_adf_data(adf_data)
-                        plot_frac_FFD(test_arrs, df, save_loc)
+                        # plot_frac_FFD(test_arrs, df, save_loc)
 
-                        save_name = f'{save_loc}\\plots\\{sec}_{key}_{test_col}_d_{ws}_analysis.png'
+                        save_name = f'{save_loc}\\plots\\{sec}_{test_col}_d_{ws}_analysis.png'
                         os.makedirs(os.path.dirname(save_name), exist_ok=True)
 
                         try:
                             plot_adf_test(adf_data, save_name)
+
                         except:
                             continue
 
-            best_params = pd.concat(best_params, axis=1).T
-            bp_save = f'{save_loc}\\{sec}_{timef}_best_params.xlsx'
-            best_params.to_excel(bp_save)
-
-    merge_files = glob.glob(os.path.join(save_loc, "*.xlsx"))
-    merge_files = [file for file in merge_files if not file.endswith("all_FFD_params.xlsx")]
-    merge_files = [file for file in merge_files if not file.endswith("all_other_params.xlsx")]
-    merge_dfs = []
-    for file in merge_files:
-        basename = os.path.basename(file)
-        parts = basename.split("_")
-        df = pd.read_excel(file)
-        df['security'] = parts[0]
-        df['time_frame'] = parts[1]
-        col_1 = ['security', 'time_frame']
-        col_2 = [col for col in df.columns if col not in col_1]
-        df = df[col_1+col_2]
-
-        merge_dfs.append(df)
-
-    final_df = pd.concat(merge_dfs, ignore_index=True).reset_index(drop=True)
-    for col in ['Unnamed: 0', 'index']:
-        if col in final_df.columns:
-            final_df = final_df.drop(columns=[col], errors='ignore')
-
-    all_other = pd.read_excel(f'{save_loc}\\all_other_params.xlsx')
-    final_df = pd.concat((final_df, all_other), ignore_index=True).reset_index(drop=True)
-    final_df.to_excel(f'{save_loc}\\all_FFD_params.xlsx', index=False)
+                if plot_opt_d:
+                    plot_best_ffd_params(save_loc, df, arr, sec, timef, test_col)
 
 
 

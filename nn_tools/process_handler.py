@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from analysis_tools.param_chooser import AlgoParamResults
     from data_tools.data_mkt_setup_tools import MktDataSetup, MktDataWorking
     from nn_tools.save_handler import SaveHandler
-    from nn_tools.model_tools import LstmOptModel
+    from nn_tools.basic_lstm_model_tools import LstmOptModel
     from data_tools.data_prediction_tools import ModelOutputData
     from data_tools.data_mkt_lstm_tools import LstmData
 
@@ -42,16 +42,17 @@ class SetupParams:
 class ProcessHandler:
     def __init__(self, setup_params: dict):
         self.setup_params = SetupParams(setup_params)
-        self.lstm_model: "LstmOptModel"
-        self.save_handler = SaveHandler
+        self.lstm_model = None
+        self.save_handler: "SaveHandler"
         self.mkt_setup: "MktDataSetup"
         self.mktdata_working: "MktDataWorking"
-        self.lstm_data = LstmData
+        self.lstm_data: "LstmData"
         self.trade_data: "TradeData"
         self.param_chooser: "AlgoParamResults"
         self.model_output_data: "ModelOutputData"
 
         self.test_dates = self.get_test_dates()
+
         self.train_modeltf = True
         self.retraintf = False
         self.predict_datatf = True
@@ -76,7 +77,7 @@ class ProcessHandler:
 
         return test_dates
 
-    def decide_model_to_train(self, param, test_date, use_previous_model):
+    def decide_model_to_train(self, test_date, use_previous_model):
         current_model_exists = os.path.exists(f'{self.save_handler.model_save_path}\\model.keras')
         previous_model_exists = os.path.exists(f'{self.save_handler.previous_model_path}\\model.keras')
         self.prior_traintf = False
@@ -104,4 +105,32 @@ class ProcessHandler:
             print(f'Training New Model...')
             self.train_modeltf = True
             self.prior_traintf = False
-        print(f'Training Model: \n...Param: {param} \n...Side: {self.side} \n...Test Date: {test_date}')
+        print(f'Training Model: \n...Param: {self.paramset_id} \n...Side: {self.side} \n...Test Date: {test_date}')
+
+    def decide_load_prior_model(self):
+        if self.prior_traintf:
+            print(f'Loading Prior Model: {self.previous_train_path}')
+            if self.load_current_model:
+                self.save_handler.load_current_test_date_model()
+            elif self.load_previous_model:
+                self.save_handler.load_prior_test_date_model()
+
+    def decide_load_scalers(self):
+        load_scalers = False
+        if self.prior_traintf:
+            load_scalers = True
+            self.save_handler.load_scalers(self.retraintf)
+
+        else:
+            print('Creating New Scalers')
+
+        return load_scalers
+
+    def ph_train_model(self, ind):
+        if not self.prior_traintf:
+            self.lstm_model.build_compile_model()
+        else:
+            print(f'Loaded Previous Model')
+        self.lstm_model.train_model(ind, previous_train=self.prior_traintf)
+        self.save_handler.save_model(ind)
+

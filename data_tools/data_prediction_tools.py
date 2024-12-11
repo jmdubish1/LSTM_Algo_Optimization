@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import data_tools.math_tools as mt
-from nn_tools.model_tools import CustomDataGenerator
+from nn_tools.custom_callbacks_layers import CustomDataGenerator
 from sklearn.metrics import confusion_matrix, classification_report, precision_recall_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.calibration import CalibratedClassifierCV

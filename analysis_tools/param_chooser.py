@@ -148,10 +148,12 @@ class AlgoParamResults:
                     self.pnl_df.loc[self.pnl_df['percentile'] > 0.5, layer] * 1.05)
             self.pnl_df[layer] = self.pnl_df[layer].astype(int)
 
-    def adj_lstm_training_nodes(self, side, param):
+    def adj_lstm_training_nodes(self):
+        self.set_lstm_nodes()
         for layer in ['lstm_i1_nodes', 'lstm_i2_nodes', 'dense_m1_nodes', 'dense_wl1_nodes', 'dense_pl1_nodes']:
-            self.ph.setup_params.lstm_dict[layer] = (
-                self.pnl_df.loc[(self.pnl_df['side'] == side) & (self.pnl_df['paramset_id'] == param), layer].iloc)[0]
+            self.ph.lstm_model.lstm_dict[layer] = (
+                self.pnl_df.loc[(self.pnl_df['side'] ==
+                                 self.ph.side) & (self.pnl_df['paramset_id'] == self.ph.paramset_id), layer].iloc)[0]
 
     def valid_param_list(self, train_bad_paramsets):
         valid_params = self.get_valid_params(train_bad_paramsets)
@@ -176,7 +178,6 @@ class AlgoParamResults:
             valid_params = np.concatenate((good_params, self.ph.setup_params.chosen_params[side]))
 
         valid_params = sorted(np.unique(valid_params).astype(int))
-        self.set_lstm_nodes()
         self.save_all_params(valid_params, side)
 
         return valid_params

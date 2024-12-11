@@ -52,6 +52,10 @@ class TradeData:
             self.trade_df)[self.trade_df['DateTime'].dt.date >=
                            pd.to_datetime(self.ph.setup_params.start_train_date).date()]
 
+    def set_dates(self, test_date):
+        self.curr_test_date = pd.to_datetime(test_date)
+        self.start_period_test_date = self.curr_test_date - timedelta(self.ph.setup_params.test_period_days)
+
     def set_pnl(self):
         self.trade_df['PnL'] = np.where(self.trade_df['side'] == 'Bear',
                                         self.trade_df['entryPrice'] - self.trade_df['exitPrice'],
@@ -62,15 +66,16 @@ class TradeData:
     def create_working_df(self):
         print('\nCreating Trades Work Df')
         self.working_df = self.trade_df[(self.trade_df['paramset_id'] == self.ph.paramset_id) &
-                                        (self.trade_df['side'] == self.ph.paramset_id)]
+                                        (self.trade_df['side'] == self.ph.side)]
 
-    def separate_train_test(self, curr_test_date):
+        if self.ph.setup_params.model_type == 'basic_lstm':
+            self.working_df = set_pnl_label(self.working_df, self.start_period_test_date,
+                                            low_percentile=25, high_percentile=75)
+
+    def separate_train_test(self):
         print('\nSeparating Train-Test')
-        self.curr_test_date = pd.to_datetime(curr_test_date)
         self.subset_test_period()
-
         self.clip_pnl(low_percentile=1, high_percentile=99)
-        self.start_period_test_date = self.curr_test_date - timedelta(self.ph.setup_params.test_period_days)
         train_df = self.working_df[self.working_df['DateTime'] <= self.start_period_test_date]
         self.train_dates = list(np.unique(train_df['DateTime'].dt.date))
         self.y_train_df = train_df
@@ -111,3 +116,27 @@ class TradeData:
         self.train_dates = []
         self.y_train_df = None
 
+
+def set_pnl_label(df, curr_test_date, low_percentile=20, high_percentile=20):
+    df['PnL'] = np.where(df['side'] == 'Bear',
+                         df['entryPrice'] - df['exitPrice'],
+                         df['exitPrice'] - df['entryPrice'])
+    df['Label'] = np.empty(len(df), dtype=object)
+    for side in ['Bull', 'Bear']:
+        temp_df = df[df['side'] == side]
+        temp_train = temp_df[temp_df['DateTime'].dt.date <= pd.to_datetime(curr_test_date)]
+        pnl_arr = temp_train['PnL'].values
+        percentile_low = np.percentile(pnl_arr, low_percentile)
+        percentile_high = np.percentile(pnl_arr, high_percentile)
+
+        conds = [(temp_df['PnL'] <= percentile_low),
+                 (temp_df['PnL'] < 0) & (temp_df['PnL'] > percentile_low),
+                 (temp_df['PnL'] > 0) & (temp_df['PnL'] < percentile_high),
+                 (temp_df['PnL'] >= percentile_high)]
+        labels = ['lg_loss', 'sm_loss', 'sm_win', 'lg_win']
+        default = 'sm_loss'
+
+        df.loc[df.index, 'Label'] = np.select(conds, labels, default=default)
+        df.drop(columns=['Win_Loss'], inplace=True)
+
+    return df

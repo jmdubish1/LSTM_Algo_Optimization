@@ -148,11 +148,11 @@ def weighted_auc(class_weights):
 """-------------------------------------------Combined Functions-----------------------------------------------------"""
 
 
-def comb_focal_wce_f1(beta=1.0, opt_threshold=0.5, class_weights=(0.9, 1.5)):
+def comb_class_loss(beta=1.0, opt_threshold=0.5, class_weights=(0.9, 1.5)):
     loss_wce_fn = weighted_categorical_crossentropy(class_weights)
     f1_score_fn = beta_f1(beta, opt_threshold)
-    auc_fn = weighted_auc(class_weights)
-    npv_fn = negative_predictive_value(opt_threshold)
+    # auc_fn = weighted_auc(class_weights)
+    # npv_fn = negative_predictive_value(opt_threshold)
     ppv_fn = positive_predictive_value(opt_threshold)
 
     def combined_wl_loss(y_true, y_pred):
@@ -160,24 +160,23 @@ def comb_focal_wce_f1(beta=1.0, opt_threshold=0.5, class_weights=(0.9, 1.5)):
         y_pred = tf.cast(y_pred, tf.float32)
 
         # Calculate individual losses
-        loss_fl = focal_loss()(y_true, y_pred)
+        # loss_fl = focal_loss()(y_true, y_pred)
         wce_loss = loss_wce_fn(y_true, y_pred)
         f1_loss = tf.math.log1p(1 - f1_score_fn(y_true, y_pred))
-        auc_loss = auc_fn(y_true, y_pred)
-        npv_loss = tf.math.log1p(1 - npv_fn(y_true, y_pred))
+        # auc_loss = auc_fn(y_true, y_pred)
+        # npv_loss = tf.math.log1p(1 - npv_fn(y_true, y_pred))
         ppv_loss = tf.math.log1p(1 - ppv_fn(y_true, y_pred))
 
         # Weighted sum of the losses
-        weight_fl = 1.0
+        # weight_fl = 1.0
         weight_f1 = 0.5
-        weight_wce = 2.0
-        weight_auc = 0.5
-        weight_npv = 0.5
-        weight_ppv = 0.5
+        weight_wce = 1.5
+        # weight_auc = 1.5
+        # weight_npv = 1.5
+        weight_ppv = 1.5
 
-        combined_loss_value = (weight_fl * loss_fl + weight_wce * wce_loss +
-                               weight_f1 * f1_loss + weight_auc * auc_loss +
-                               weight_npv * npv_loss + weight_ppv * ppv_loss)
+        combined_loss_value = (weight_wce * wce_loss + weight_ppv * ppv_loss +
+                               weight_f1 + f1_loss)
 
         return combined_loss_value
 

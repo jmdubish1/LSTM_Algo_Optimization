@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta
 from openpyxl.drawing.image import Image
 import nn_tools.loss_functions as lf
-# from nn_tools.model_tools import TemperatureScalingLayer
+from nn_tools.custom_callbacks_layers import TemperatureScalingLayer
 import keras
 import pickle
 
@@ -31,24 +31,25 @@ class SaveHandler:
         self.data_folder = ''
         self.model_folder = ''
         self.main_train_path = ''
-        self.previous_model_path = None
-        self.model_save_path = None
+        self.previous_model_path = ''
+        self.model_save_path = ''
 
     def check_create_model_folder(self):
         self.param_folder = \
             (f'{self.ph.setup_params.trade_dat_loc}\\{self.ph.setup_params.security}\\'
              f'{self.ph.setup_params.time_frame_test}\\'
              f'{self.ph.setup_params.time_frame_test}_test_{self.ph.setup_params.time_len}\\'
-             f'{self.ph.side}')
+             f'{self.ph.setup_params.model_type}\\{self.ph.side}')
 
         self.data_folder = f'{self.param_folder}\\Data'
         self.model_folder = f'{self.param_folder}\\Models'
-        self.main_train_path = f'{self.model_folder}\\{self.lstm_model.side}\\param_{self.lstm_model.param}_main_model'
+        self.main_train_path = f'{self.model_folder}\\{self.ph.side}\\param_{self.ph.paramset_id}_main_model'
 
         for folder in [self.param_folder, self.data_folder, self.model_folder]:
             os.makedirs(folder, exist_ok=True)
 
-    def set_model_train_paths(self, test_date):
+    def set_model_train_paths(self):
+        test_date = self.ph.trade_data.curr_test_date
         self.check_create_model_folder()
 
         previous_test_date = pd.to_datetime(test_date) - timedelta(days=self.ph.setup_params.test_period_days)
@@ -73,9 +74,9 @@ class SaveHandler:
         print(f'Loading Prior Week Model: {str(last_test_date)}')
 
         class_weights = self.ph.lstm_model.get_class_weights()
-        combined_wl_loss = lf.comb_focal_wce_f1(beta=2.0,
-                                                opt_threshold=threshold,
-                                                class_weights=class_weights)
+        combined_wl_loss = lf.comb_class_loss(beta=2.0,
+                                              opt_threshold=threshold,
+                                              class_weights=class_weights)
         npv_fn = lf.negative_predictive_value(threshold)
         focal_loss_fn = lf.focal_loss()
         huber_loss = lf.weighted_huber_loss()
@@ -98,9 +99,9 @@ class SaveHandler:
         threshold = self.ph.lstm_model.opt_threshold
         class_weights = self.ph.lstm_model.get_class_weights()
         focal_loss_fn = lf.focal_loss()
-        combined_wl_loss = lf.comb_focal_wce_f1(beta=2.0,
-                                                opt_threshold=threshold,
-                                                class_weights=class_weights)
+        combined_wl_loss = lf.comb_class_loss(beta=2.0,
+                                              opt_threshold=threshold,
+                                              class_weights=class_weights)
         npv_fn = lf.negative_predictive_value(threshold)
         huber_loss = lf.weighted_huber_loss()
         auc = lf.weighted_auc(class_weights)
@@ -120,9 +121,9 @@ class SaveHandler:
 
     def save_scalers(self):
         scalers = {
-            'y_pnl_scaler': self.ph.mkt_data.y_pnl_scaler,
-            'intra_scaler': self.ph.mkt_data.intra_scaler,
-            'daily_scaler': self.ph.mkt_data.daily_scaler
+            'y_pnl_scaler': self.ph.lstm_data.y_pnl_scaler,
+            'intra_scaler': self.ph.lstm_data.intra_scaler,
+            'daily_scaler': self.ph.lstm_data.daily_scaler
         }
         os.makedirs(os.path.dirname(f'{self.model_save_path}\\'), exist_ok=True)
         for key, val in scalers.items():
@@ -136,21 +137,21 @@ class SaveHandler:
 
         if (not retrain or not curr_scalers_exist) and prev_scalers_exist:
             with open(f'{self.previous_model_path}\\y_pnl_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.y_pnl_scaler = pickle.load(f)
+                self.ph.lstm_data.y_pnl_scaler = pickle.load(f)
             with open(f'{self.previous_model_path}\\intra_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.intra_scaler = pickle.load(f)
+                self.ph.lstm_data.intra_scaler = pickle.load(f)
             with open(f'{self.previous_model_path}\\daily_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.daily_scaler = pickle.load(f)
+                self.ph.lstm_data.daily_scaler = pickle.load(f)
                 print(f'...Loaded Previous Scalers: \n'
                       f'{self.previous_model_path}')
 
         elif curr_scalers_exist:
             with open(f'{self.model_save_path}\\y_pnl_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.y_pnl_scaler = pickle.load(f)
+                self.ph.lstm_data.y_pnl_scaler = pickle.load(f)
             with open(f'{self.model_save_path}\\intra_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.intra_scaler = pickle.load(f)
+                self.ph.lstm_data.intra_scaler = pickle.load(f)
             with open(f'{self.model_save_path}\\daily_scaler.pkl', 'rb') as f:
-                self.ph.mkt_data.daily_scaler = pickle.load(f)
+                self.ph.lstm_data.daily_scaler = pickle.load(f)
                 print(f'Loaded Previous Scalers: \n'
                       f'...{self.model_save_path}')
         else:
@@ -227,14 +228,12 @@ class SaveHandler:
                 return
 
             if param in existing_data['paramset_id'].values:
-                # Update the existing row
                 existing_data.loc[existing_data['paramset_id'] == param, :] = temp_df.values[0]
             else:
-                # Append the new row
                 existing_data = pd.concat([existing_data, temp_df], ignore_index=True)
 
             existing_data.to_excel(opt_thres_file, index=False, engine='openpyxl')
-            # File doesn't exist, create it
+
         else:
             temp_df.to_excel(opt_thres_file, index=False, engine='openpyxl')
 

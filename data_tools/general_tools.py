@@ -50,3 +50,10 @@ def fill_na_inf(df):
     df.fillna(0, inplace=True)
 
     return df
+
+
+def pad_to_length(arr, length, pad_value=0):
+    if arr.shape[0] >= length:
+        return arr[-length:]
+    padding = np.full((length - arr.shape[0], arr.shape[1]), pad_value)
+    return np.vstack((padding, arr))

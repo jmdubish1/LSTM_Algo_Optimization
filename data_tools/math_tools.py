@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from numba import jit
-from fracdiff import fdiff
+from arch import arch_model
 
 
 def create_atr(df, sec, n=8):
@@ -125,3 +125,33 @@ def subset_to_first_nonzero(arr):
     trimmed_arr = arr[first_nonz_ind:]
 
     return trimmed_arr
+
+
+def garch_modeling(df, sec):
+    print(f'Modeling EGARCH')
+    for met in ['Close', 'Vol']:
+        print(f'...{sec}')
+        temp_df = df[f'{sec}_{met}']
+        temp_df = rescale_data_to_range(temp_df, 500)
+        # garch_m = arch_model(temp_df, vol='GARCH', p=1, q=1)
+        # garch_fit = garch_m.fit(disp='off')
+        # df[f'{sec}_{met}_garch_cv'] = garch_fit.conditional_volatility
+        # df[f'{sec}_{met}_garch_std'] = garch_fit.std_resid
+
+        garch_m = arch_model(temp_df, vol='EGARCH', p=1, o=1, q=1)
+        garch_fit = garch_m.fit(disp='off')
+        df[f'{sec}_{met}_egarch_cv'] = garch_fit.conditional_volatility
+        df[f'{sec}_{met}_egarch_std'] = garch_fit.std_resid
+
+    return df
+
+
+def rescale_data_to_range(df, max_range=1000):
+    if df.abs().max() > max_range:
+        scale_factor = max_range / df.abs().max()
+        temp_df_scaled = df * scale_factor
+    else:
+        temp_df_scaled = df
+
+    return temp_df_scaled
+
