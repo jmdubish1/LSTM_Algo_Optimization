@@ -3,54 +3,17 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
 import matplotlib.pyplot as plt
 from tensorflow.keras.layers import Dense
+from nn_tools import general_lstm_tools as glt
+import time
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nn_tools.process_handler import ProcessHandler
 
 
-class CustomDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, process_handler: "ProcessHandler",
-                 batch_size, train=True):
-        self.ph = process_handler
-        self.train_tf = train
-        self.sample_ind_list = []
-        self.n_samples = 0
-        self.batch_size = batch_size
-        self.set_attributes()
-
-    def __len__(self):
-        # Number of batches per epoch
-        return int(np.ceil(self.n_samples / self.batch_size))
-
-    def __getitem__(self, index):
-        start_ind = index * self.batch_size
-        end_ind = (index + 1) * self.batch_size
-        train_inds = self.sample_ind_list[start_ind:end_ind]
-        batch_gen = self.ph.lstm_data.create_batch_input_lstm(train_inds, self.train_tf)
-
-        (x_day_arr, x_intra_arr), labels = next(batch_gen)
-        y_wl_arr = labels['wl_class']
-        y_pnl_arr = labels['pnl']
-
-        return (x_day_arr, x_intra_arr), {'wl_class': y_wl_arr, 'pnl': y_pnl_arr}
-
-    def set_attributes(self):
-        if self.train_tf:
-            self.sample_ind_list = list(range(len(self.ph.lstm_data.y_train_pnl_df.index)))
-            self.n_samples = len(self.ph.lstm_data.y_train_pnl_df)
-
-        else:
-            self.sample_ind_list = list(range(len(self.ph.lstm_data.y_test_pnl_df.index)))
-            self.n_samples = len(self.ph.lstm_data.y_test_pnl_df)
-
-    def on_epoch_end(self):
-        self.set_attributes()
-
-
-class LivePlotLosses(Callback):
+class LivePlotLossesLSTM(Callback):
     def __init__(self, plot_live):
-        super(LivePlotLosses, self).__init__()
+        super(LivePlotLossesLSTM, self).__init__()
         self.plot_live = plot_live
         self.epochs = []
 
@@ -166,17 +129,63 @@ class LivePlotLosses(Callback):
             plt.close()
 
 
+class LivePlotLossesMDN(Callback):
+    def __init__(self, plot_live):
+        super(LivePlotLossesMDN, self).__init__()
+        self.plot_live = plot_live
+        self.epochs = []
+
+        self.losses = []
+        self.losses_val = []
+
+        self.train_loss_line = None
+        self.val_loss_line = None
+
+        if self.plot_live:
+            plt.ion()
+        self.fig, self.axs = plt.subplots(figsize=(8, 4))  # Create a 2x2 grid of subplots
+        self.fig.tight_layout()
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        self.epochs.append(epoch + 1)  # Accumulate epochs
+        self.losses.append(logs.get('loss'))
+        self.losses_val.append(logs.get('val_loss'))
+
+        if self.train_loss_line is None:
+            self.train_loss_line, = self.axs.plot([], [], label="Train", marker='.', color='blue')
+            self.val_loss_line, = self.axs.plot([], [], label="Val", marker='.', color='darkred')
+            self.axs.set_title("Total Loss")
+            self.axs.legend()
+
+        self.train_loss_line.set_data(self.epochs, self.losses)
+        self.val_loss_line.set_data(self.epochs, self.losses_val)
+
+        self.axs.relim()
+        self.axs.autoscale_view()
+
+        if self.plot_live:
+            self.fig.canvas.draw()
+            plt.pause(0.2)
+
+    def save_plot(self, save_loc, param_id):
+        plt.savefig(f'{save_loc}\\param_{param_id}_plot.png', dpi=500)
+
+    def on_train_end(self, logs=None):
+        if self.plot_live:
+            plt.ioff()  # Turn off interactive mode at the end
+            plt.close()
+
+
 class StopAtAccuracy(Callback):
     def __init__(self, accuracy_threshold=.99):
         super(StopAtAccuracy, self).__init__()
         self.accuracy_threshold = accuracy_threshold
 
     def on_epoch_end(self, epoch, logs=None):
-        wl_ppv = logs.get('wl_class_ppv')
-        wl_npv = logs.get('wl_class_ppv')
-        if ((wl_ppv is not None and wl_ppv >= self.accuracy_threshold) and
-                (wl_npv is not None and wl_npv >= self.accuracy_threshold)):
-            print(f"\nReached {self.accuracy_threshold*100}% PPV & NPV accuracy, stopping training!")
+        min_loss = logs.get('loss')
+        if min_loss is not None and min_loss <= self.accuracy_threshold:
+            print(f"\nReached {self.accuracy_threshold*100}% Min Loss, stopping training!")
             self.model.stop_training = True
 
 

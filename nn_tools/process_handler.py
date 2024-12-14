@@ -1,9 +1,11 @@
 from __future__ import annotations
 import os
-import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import timedelta
 import data_tools.general_tools as gt
+import cProfile
+import pstats
+import io
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -11,7 +13,6 @@ if TYPE_CHECKING:
     from analysis_tools.param_chooser import AlgoParamResults
     from data_tools.data_mkt_setup_tools import MktDataSetup, MktDataWorking
     from nn_tools.save_handler import SaveHandler
-    from nn_tools.basic_lstm_model_tools import LstmOptModel
     from data_tools.data_prediction_tools import ModelOutputData
     from data_tools.data_mkt_lstm_tools import LstmData
 
@@ -37,6 +38,10 @@ class SetupParams:
         self.sample_percent = setup_dict['sample_percent']
         self.total_param_sets = setup_dict['total_param_sets']
         self.chosen_params = setup_dict['chosen_params']
+        self.classes = setup_dict['classes']
+        self.num_y_cols = len(self.classes)
+        self.percentiles = setup_dict['percentiles']
+
 
 
 class ProcessHandler:
@@ -131,6 +136,17 @@ class ProcessHandler:
             self.lstm_model.build_compile_model()
         else:
             print(f'Loaded Previous Model')
-        self.lstm_model.train_model(ind, previous_train=self.prior_traintf)
-        self.save_handler.save_model(ind)
+        profiler = cProfile.Profile()
+        profiler.enable()
+        self.lstm_model.train_model(ind, previous_train=self.previous_train_path)
+        profiler.disable()
+        profiler_file = "profile_results.prof"
+        profiler.dump_stats(profiler_file)
+
+        with open("profile_readable.txt", "w") as file:
+            stats = pstats.Stats("profile_results.prof", stream=file)
+            stats.sort_stats('cumulative').print_stats()
+
+        # self.save_handler.save_model(ind)
+
 

@@ -67,57 +67,42 @@ class SaveHandler:
         if i == 0:
             self.ph.lstm_model.model.save(f'{self.main_train_path}\\model.keras')
 
+    def load_model(self, model_path):
+        threshold = self.ph.lstm_model.opt_threshold
+        if self.ph.setup_params.model_type == 'classification_lstm':
+            class_weights = self.ph.lstm_model.get_class_weights()
+            combined_wl_loss = lf.comb_class_loss(beta=2.0,
+                                                  opt_threshold=threshold,
+                                                  class_weights=class_weights)
+            npv_fn = lf.negative_predictive_value(threshold)
+            focal_loss_fn = lf.focal_loss()
+            huber_loss = lf.weighted_huber_loss()
+            auc = lf.weighted_auc(class_weights)
+            ppv_fn = lf.positive_predictive_value(threshold)
+
+            self.ph.lstm_model.model = (
+                keras.models.load_model(f'{model_path}',
+                                        custom_objects={'focal_loss_fixed': focal_loss_fn,
+                                                        'combined_wl_loss': combined_wl_loss,
+                                                        'npv': npv_fn,
+                                                        'ppv': ppv_fn,
+                                                        'auc_loss': auc,
+                                                        'huber_loss': huber_loss,
+                                                        'TemperatureScalingLayer': TemperatureScalingLayer
+                                                        }))
+            self.ph.lstm_model.model.load_weights(f'{self.model_save_path}\\model.keras')
+
     def load_prior_test_date_model(self):
+        model_path = f'{self.previous_model_path}\\model.keras'
         last_test_date = (pd.to_datetime(self.test_date, format='%Y-%m-%d') -
                           timedelta(days=self.ph.setup_params.test_period_days)).strftime(format='%Y-%m-%d')
-        threshold = self.ph.lstm_model.opt_threshold
+        self.load_model(model_path)
         print(f'Loading Prior Week Model: {str(last_test_date)}')
 
-        class_weights = self.ph.lstm_model.get_class_weights()
-        combined_wl_loss = lf.comb_class_loss(beta=2.0,
-                                              opt_threshold=threshold,
-                                              class_weights=class_weights)
-        npv_fn = lf.negative_predictive_value(threshold)
-        focal_loss_fn = lf.focal_loss()
-        huber_loss = lf.weighted_huber_loss()
-        auc = lf.weighted_auc(class_weights)
-        ppv_fn = lf.positive_predictive_value(threshold)
-
-        self.ph.lstm_model.model = (
-            keras.models.load_model(f'{self.previous_model_path}\\model.keras',
-                                    custom_objects={'focal_loss_fixed': focal_loss_fn,
-                                                    'combined_wl_loss': combined_wl_loss,
-                                                    'npv': npv_fn,
-                                                    'ppv': ppv_fn,
-                                                    'auc_loss': auc,
-                                                    'huber_loss': huber_loss,
-                                                    'TemperatureScalingLayer': TemperatureScalingLayer
-                                                    }))
-
     def load_current_test_date_model(self):
+        model_path = f'{self.model_save_path}\\model.keras'
+        self.load_model(model_path)
         print(f'Loading Current Week Model: {self.ph.side}: {self.ph.paramset_id}: {self.test_date}')
-        threshold = self.ph.lstm_model.opt_threshold
-        class_weights = self.ph.lstm_model.get_class_weights()
-        focal_loss_fn = lf.focal_loss()
-        combined_wl_loss = lf.comb_class_loss(beta=2.0,
-                                              opt_threshold=threshold,
-                                              class_weights=class_weights)
-        npv_fn = lf.negative_predictive_value(threshold)
-        huber_loss = lf.weighted_huber_loss()
-        auc = lf.weighted_auc(class_weights)
-        ppv_fn = lf.positive_predictive_value(threshold)
-
-        self.ph.lstm_model.model = (
-            keras.models.load_model(f'{self.model_save_path}\\model.keras',
-                                    custom_objects={'focal_loss_fixed': focal_loss_fn,
-                                                    'combined_wl_loss': combined_wl_loss,
-                                                    'npv': npv_fn,
-                                                    'ppv': ppv_fn,
-                                                    'auc_loss': auc,
-                                                    'huber_loss': huber_loss,
-                                                    'TemperatureScalingLayer': TemperatureScalingLayer
-                                                    }))
-        self.ph.lstm_model.model.load_weights(f'{self.model_save_path}\\model.keras')
 
     def save_scalers(self):
         scalers = {

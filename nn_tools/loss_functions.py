@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import backend as K
+import tensorflow_probability as tfp
 
 
 def weighted_huber_loss(delta=1.5, weight=1.5):
@@ -143,6 +144,62 @@ def weighted_auc(class_weights):
         return loss
 
     return auc_loss
+
+
+@tf.function
+def gaussian_pdf(y_true, mu, sigma):
+    y_true = tf.expand_dims(y_true, -1)  # Add Gaussian component dimension
+    prob = tfp.distributions.Normal(loc=mu, scale=sigma).prob(y_true)
+
+    return prob
+
+
+@tf.function
+def mdn_loss(y_true, preds):
+    pi, mu, sigma = tf.split(preds, 3, axis=-1)
+    prob = gaussian_pdf(y_true, mu, sigma)  # Likelihood for each Gaussian
+    weighted_prob = tf.reduce_sum(pi * prob, axis=-1)  # Mixture likelihood
+    nll = -tf.math.log(weighted_prob + 1e-8)  # Avoid log(0)
+    return tf.reduce_mean(nll)
+
+
+def penalized_categorical_crossentropy(penalty_matrix):
+    """
+    Creates a custom TensorFlow loss function using categorical cross-entropy
+    with penalties for misclassifications based on a penalty matrix.
+
+    Parameters:
+    - penalty_matrix (np.ndarray): A 2D NumPy array representing penalties for misclassifications.
+
+    Returns:
+    - A TensorFlow loss function that computes penalized categorical cross-entropy.
+    """
+    penalty_tensor = tf.constant(penalty_matrix, dtype=tf.float32)
+
+    def loss_fn(y_true, y_pred):
+        """
+        Custom loss function that computes penalized categorical cross-entropy.
+
+        Parameters:
+        - y_true (Tensor): True labels (one-hot encoded).
+        - y_pred (Tensor): Predicted probabilities.
+
+        Returns:
+        - Penalized categorical cross-entropy loss.
+        """
+        y_pred = tf.clip_by_value(y_pred, 1e-7, 1 - 1e-7)
+        y_true_idx = tf.argmax(y_true, axis=1)  # True class indices
+        y_pred_idx = tf.argmax(y_pred, axis=1)  # Predicted class indices
+
+        penalties = tf.gather_nd(penalty_tensor, tf.stack([y_true_idx, y_pred_idx], axis=1))
+
+        cross_entropy = -tf.reduce_sum(y_true * tf.math.log(y_pred), axis=1)
+
+        penalized_cross_entropy = cross_entropy * penalties
+
+        return tf.reduce_mean(penalized_cross_entropy)
+
+    return loss_fn
 
 
 """-------------------------------------------Combined Functions-----------------------------------------------------"""

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import io
+from tensorflow.keras.metrics import Precision, Recall, AUC
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, Concatenate
@@ -10,7 +11,7 @@ from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from sklearn.utils.class_weight import compute_class_weight
 import nn_tools.loss_functions as lf
-from nn_tools.custom_callbacks_layers import CustomDataGenerator, LivePlotLosses, StopAtAccuracy, MDNLayer
+from nn_tools.custom_callbacks_layers import LivePlotLossesLSTM,StopAtAccuracy, TemperatureScalingLayer
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ if gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
 
 
-class MdnOptModel:
+class LstmOptModel:
     def __init__(self,
                  process_handler: "ProcessHandler",
                  lstm_dict: dict):
@@ -93,7 +94,7 @@ class MdnOptModel:
                                          min_lr=.00000025,
                                          cooldown=3,
                                          verbose=2)
-        self.model_plot = LivePlotLosses(plot_live=self.lstm_dict['plot_live'])
+        self.model_plot = LivePlotLossesLSTM(plot_live=self.lstm_dict['plot_live'])
 
         train_data_gen, test_data_gen = self.get_input_datasets()
 
@@ -193,8 +194,27 @@ class MdnOptModel:
                           kernel_regularizer=l2(0.01),
                           name='dense_wl1')(drop_i1)
 
+        dense_pl1 = Dense(units=self.lstm_dict['dense_pl1_nodes'],
+                          activation='tanh',
+                          kernel_initializer=GlorotUniform(),
+                          kernel_regularizer=l2(0.01),
+                          name='dense_pl1')(drop_i1)
+
+        logit_layer = Dense(2,
+                            activation=None,
+                            name='logits')(dense_wl1)
+
+        temp_scale_wl = TemperatureScalingLayer(self.temperature,
+                                                name='temp_scaling')(logit_layer)
+
         # Output layers
-        self.win_loss_output = MDNLayer(3, 4)(dense_wl1)
+        self.win_loss_output = Dense(2,
+                                     activation='sigmoid',
+                                     name='wl_class')(temp_scale_wl)
+
+        self.float_output = Dense(units=1,
+                                  activation='tanh',
+                                  name='pnl')(dense_pl1)
 
     def get_generator(self, traintf=True):
         if traintf:
@@ -273,9 +293,4 @@ class MdnOptModel:
                                 (opt_df['paramset_id'] == self.ph.paramset_id), 'opt_threshold'].values)[0]
             else:
                 self.opt_threshold = self.lstm_dict['opt_threshold'][self.ph.side]
-
-
-
-
-
 

@@ -38,15 +38,15 @@ class MktDataSetup:
             temp_df = pd.read_csv(f'{self.ph.setup_params.data_loc}\\{sec}_{data_end}')
             temp_df = gt.convert_date_to_dt(temp_df)
 
-            daily_temp = temp_df[['DateTime', 'Open', 'High', 'Low', 'Close', 'Vol']]
+            temp_df = temp_df[['DateTime', 'Open', 'High', 'Low', 'Close', 'Vol']]
 
             if sec == self.ph.setup_params.security:
-                self.security_df = daily_temp.copy(deep=True)
+                self.security_df = temp_df.copy(deep=True)
 
-            for col in daily_temp.columns[1:]:
-                daily_temp.rename(columns={col: f'{sec}_{col}'}, inplace=True)
+            for col in temp_df.columns[1:]:
+                temp_df.rename(columns={col: f'{sec}_{col}'}, inplace=True)
 
-            dfs.append(daily_temp)
+            dfs.append(temp_df)
 
         if time_frame == 'daily':
             self.dailydata_clean = gt.merge_dfs(dfs)
@@ -69,7 +69,7 @@ class MktDataWorking:
 
         self.prep_working_data('daily')
         self.prep_working_data('intraday')
-        self.subset_start_time()
+        # self.subset_start_time()
 
     def prep_working_data(self, time_frame):
         print(f'Prepping Working Data: {time_frame} ')

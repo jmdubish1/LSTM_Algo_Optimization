@@ -4,23 +4,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="996bc455-32d6-4081-b96a-e6a9a237c6cb" name="Changes" comment="Initial Commit. Rewriting previous to cut and clean.">
-      <change afterPath="$PROJECT_DIR$/nn_tools/basic_lstm_model_tools.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/nn_tools/custom_callbacks_layers.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/nn_tools/mixdensity_lstm_model_tools.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/testing_grounds/garch.py" afterDir="false" />
+    <list default="true" id="996bc455-32d6-4081-b96a-e6a9a237c6cb" name="Changes" comment="Adding new Mixed Density Model">
+      <change afterPath="$PROJECT_DIR$/nn_tools/general_lstm_tools.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/testing_grounds/scratch.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/analysis_tools/fractional_diff_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/analysis_tools/fractional_difference_optimization.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/analysis_tools/param_chooser.py" beforeDir="false" afterPath="$PROJECT_DIR$/analysis_tools/param_chooser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_tools/data_mkt_lstm_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/data_mkt_lstm_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_tools/data_mkt_setup_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/data_mkt_setup_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_tools/data_prediction_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/data_prediction_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_tools/data_trade_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/data_trade_tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data_tools/general_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/general_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_tools/math_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_tools/math_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main/lstm_main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main/lstm_main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nn_tools/basic_lstm_model_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/garbage/class_lstm_model_tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nn_tools/custom_callbacks_layers.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn_tools/custom_callbacks_layers.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nn_tools/loss_functions.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn_tools/loss_functions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nn_tools/model_tools.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/nn_tools/mixdensity_lstm_model_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn_tools/class_lstm_model_tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nn_tools/process_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn_tools/process_handler.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nn_tools/save_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn_tools/save_handler.py" afterDir="false" />
     </list>
@@ -62,25 +59,54 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Python.class_lstm_model_tools.executor": "Run",
     "Python.data_mkt_lstm_tools.executor": "Run",
     "Python.data_mkt_setup_tools.executor": "Run",
     "Python.fractional_difference_optimization.executor": "Run",
     "Python.lstm_main.executor": "Run",
     "Python.param_chooser.executor": "Run",
     "Python.process_handler.executor": "Run",
+    "Python.scratch.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/Users/jmdub/PycharmProjects/LSTM_Algo_Optimization/nn_tools",
+    "last_opened_file_path": "C:/Users/jmdub/PycharmProjects/LSTM_Algo_Optimization/main",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\jmdub\PycharmProjects\LSTM_Algo_Optimization\main" />
       <recent name="C:\Users\jmdub\PycharmProjects\LSTM_Algo_Optimization\nn_tools" />
       <recent name="C:\Users\jmdub\PycharmProjects\LSTM_Algo_Optimization\analysis_tools" />
     </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\jmdub\PycharmProjects\LSTM_Algo_Optimization\main\logs" />
+      <recent name="C:\Users\jmdub\PycharmProjects\LSTM_Algo_Optimization\garbage" />
+    </key>
   </component>
-  <component name="RunManager" selected="Python.lstm_main">
+  <component name="RunManager" selected="Python.scratch">
+    <configuration name="class_lstm_model_tools" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="LSTM_Algo_Optimization" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/nn_tools" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/nn_tools/class_lstm_model_tools.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="data_mkt_lstm_tools" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="LSTM_Algo_Optimization" />
       <option name="ENV_FILES" value="" />
@@ -95,28 +121,6 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/data_tools/data_mkt_lstm_tools.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="data_mkt_setup_tools" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="LSTM_Algo_Optimization" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/data_tools" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/data_tools/data_mkt_setup_tools.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -169,7 +173,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="param_chooser" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="scratch" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="LSTM_Algo_Optimization" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -178,11 +182,11 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/analysis_tools" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/testing_grounds" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/analysis_tools/param_chooser.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/testing_grounds/scratch.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -193,11 +197,11 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.scratch" />
         <item itemvalue="Python.lstm_main" />
-        <item itemvalue="Python.fractional_difference_optimization" />
+        <item itemvalue="Python.class_lstm_model_tools" />
         <item itemvalue="Python.data_mkt_lstm_tools" />
-        <item itemvalue="Python.data_mkt_setup_tools" />
-        <item itemvalue="Python.param_chooser" />
+        <item itemvalue="Python.fractional_difference_optimization" />
       </list>
     </recent_temporary>
   </component>
@@ -225,11 +229,20 @@
       <option name="project" value="LOCAL" />
       <updated>1733790729722</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Adding new Mixed Density Model">
+      <option name="closed" value="true" />
+      <created>1733947101301</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1733947101301</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Initial Commit. Rewriting previous to cut and clean." />
-    <option name="LAST_COMMIT_MESSAGE" value="Initial Commit. Rewriting previous to cut and clean." />
+    <MESSAGE value="Adding new Mixed Density Model" />
+    <option name="LAST_COMMIT_MESSAGE" value="Adding new Mixed Density Model" />
   </component>
 </project>

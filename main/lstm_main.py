@@ -1,11 +1,10 @@
 import pandas as pd
-import numpy as np
 import tensorflow as tf
 from nn_tools.process_handler import ProcessHandler
 from data_tools.data_mkt_setup_tools import MktDataSetup, MktDataWorking
 from analysis_tools.param_chooser import AlgoParamResults
 from data_tools.data_trade_tools import TradeData
-from nn_tools.basic_lstm_model_tools import LstmOptModel
+from nn_tools.class_lstm_model_tools import ClassLstmModel
 from data_tools.data_prediction_tools import ModelOutputData
 from nn_tools.save_handler import SaveHandler
 from data_tools.data_mkt_lstm_tools import LstmData
@@ -23,10 +22,10 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 setup_dict = {
-    'model_type': 'mdn_lstm',
+    'model_type': 'classification_lstm',
     'strategy': 'Double_Candle',
     'security': 'NQ',
-    'other_securities': ['RTY', 'YM'], #'RTY', 'ES', 'YM', 'GC', 'CL'],
+    'other_securities': ['RTY', 'YM', 'ES'],  #, 'GC', 'CL'],
     'sides': ['Bull'],
     'time_frame_test': '15min',
     'time_frame_train': '15min',
@@ -43,22 +42,26 @@ setup_dict = {
     'total_param_sets': 289,
     'chosen_params': {'Bull': [104, 108, 12, 120, 14, 188, 234, 24, 252, 44, 76],
                       'Bear': [100, 118, 124, 160, 26, 32, 34, 40, 74]},
+    'percentiles': {'low': 35,
+                    'high': 80},
+    'classes': ['lg_loss', 'sm_loss', 'sm_win', 'lg_win']
 }
 
 lstm_model_dict = {
     'intra_lookback': 18,
     'daily_lookback': 24,
     'plot_live': True,
-    'epochs': {'Bull': 250,
-               'Bear': 250},
-    'batch_size': 16,
-    'max_accuracy': .96,
-    'lstm_i1_nodes': 24,
-    'lstm_i2_nodes': 20,
-    'dense_m1_nodes': 20,
-    'dense_wl1_nodes': 12,
-    'dense_pl1_nodes': 12,
-    'adam_optimizer': .00005,
+    'epochs': {'Bull': 75,
+               'Bear': 45},
+    'batch_size': 64,
+    'buffer_batch_num': 1500,  # Exact number of trades to pull at once
+    'max_accuracy': .5,
+    'lstm_i1_nodes': 64,
+    'lstm_i2_nodes': 32,
+    'dense_m1_nodes': 32,
+    'dense_wl1_nodes': 16,
+    'dense_pl1_nodes': 16,
+    'adam_optimizer': .0001,
     'prediction_runs': 1,
     'opt_threshold': {'Bull': .50,
                       'Bear': .50},
@@ -91,17 +94,22 @@ def main():
 
         for ph.paramset_id in valid_params[0:1]:
             MktDataWorking(ph)
-            LstmOptModel(ph, lstm_model_dict)
+            if ph.setup_params.model_type == 'classification_lstm':
+                lstm_model = ClassLstmModel(ph, lstm_model_dict)
+            else:
+                pass
             ModelOutputData(ph)
 
             print(f'Testing Dates: \n'
                   f'...{ph.test_dates}')
             for ind, test_date in enumerate(ph.test_dates):
+                print(f'Modelling {test_date}')
                 trade_data.set_dates(test_date)
                 lstm_data = LstmData(ph)
                 trade_data.create_working_df()
                 save_handler.set_model_train_paths()
                 trade_data.separate_train_test()
+                lstm_model.get_loss_penalty_matrix()
 
                 ph.decide_model_to_train(test_date, use_prev_period_model)
                 ph.decide_load_prior_model()
@@ -112,6 +120,8 @@ def main():
                     lstm_data.prep_train_test_data(load_scalers)
                     param_chooser.adj_lstm_training_nodes()
                     ph.ph_train_model(ind)
+                    ModelOutputData(ph)
+                    ph.model_output_data.predict_data()
 
 
 

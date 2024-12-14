@@ -130,7 +130,7 @@ def subset_to_first_nonzero(arr):
 def garch_modeling(df, sec):
     print(f'Modeling EGARCH')
     for met in ['Close', 'Vol']:
-        print(f'...{sec}')
+        print(f'...{sec}_{met}')
         temp_df = df[f'{sec}_{met}']
         temp_df = rescale_data_to_range(temp_df, 500)
         # garch_m = arch_model(temp_df, vol='GARCH', p=1, q=1)
@@ -155,3 +155,24 @@ def rescale_data_to_range(df, max_range=1000):
 
     return temp_df_scaled
 
+
+def compute_loss_penalty_matrix(df, classes):
+    penalty_matrix = np.zeros((len(classes), len(classes)))
+    avg_pnl_per_class = df.groupby("Label")["PnL"].mean()
+    avg_pnl_per_class = avg_pnl_per_class.reindex(classes, fill_value=0)
+
+    for i, cls_true in enumerate(classes):
+        for j, cls_pred in enumerate(classes):
+            if i != j:
+                penalty_matrix[i, j] = abs(avg_pnl_per_class[cls_true] - avg_pnl_per_class[cls_pred])
+
+    lower_triangle_sum = np.sum(np.tril(penalty_matrix, k=-1))
+    if lower_triangle_sum == 0:
+        print("The sum of the lower triangle in the penalty matrix is zero. Cannot normalize.")
+        return penalty_matrix
+
+    penalty_matrix /= lower_triangle_sum
+    penalty_matrix += 1
+
+    p_matrix = pd.DataFrame(penalty_matrix, index=classes, columns=classes)
+    return p_matrix
