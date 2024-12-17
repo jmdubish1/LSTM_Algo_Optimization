@@ -176,30 +176,31 @@ def penalized_categorical_crossentropy(penalty_matrix):
     """
     penalty_tensor = tf.constant(penalty_matrix, dtype=tf.float32)
 
-    def loss_fn(y_true, y_pred):
+    def penalized_crossentropy_loss(y_true, y_pred):
         """
-        Custom loss function that computes penalized categorical cross-entropy.
-
-        Parameters:
-        - y_true (Tensor): True labels (one-hot encoded).
-        - y_pred (Tensor): Predicted probabilities.
-
+        Custom cross-entropy loss with distance penalty.
+        Args:
+            y_true: True labels (one-hot encoded).
+            y_pred: Predicted probabilities.
         Returns:
-        - Penalized categorical cross-entropy loss.
+            Loss with distance-based penalty.
         """
-        y_pred = tf.clip_by_value(y_pred, 1e-7, 1 - 1e-7)
-        y_true_idx = tf.argmax(y_true, axis=1)  # True class indices
-        y_pred_idx = tf.argmax(y_pred, axis=1)  # Predicted class indices
 
-        penalties = tf.gather_nd(penalty_tensor, tf.stack([y_true_idx, y_pred_idx], axis=1))
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.clip_by_value(y_pred, tf.keras.backend.epsilon(), 1.0)
+        y_pred = 1 - y_pred
 
-        cross_entropy = -tf.reduce_sum(y_true * tf.math.log(y_pred), axis=1)
+        true_class_indices = tf.argmax(y_true, axis=-1)
+        penalties = tf.gather(penalty_tensor, true_class_indices, axis=0)
 
-        penalized_cross_entropy = cross_entropy * penalties
+        penalties = tf.reshape(penalties, tf.shape(y_pred))
+        penalized_log_probs = penalties * y_pred
 
-        return tf.reduce_mean(penalized_cross_entropy)
+        log_y_pred = tf.math.log1p(penalized_log_probs)  # Use log1p for stability
+        loss = tf.reduce_mean(tf.reduce_sum(log_y_pred, axis=-1))
+        return loss
 
-    return loss_fn
+    return penalized_crossentropy_loss
 
 
 """-------------------------------------------Combined Functions-----------------------------------------------------"""

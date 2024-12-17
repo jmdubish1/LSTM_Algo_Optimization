@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import data_tools.general_tools as gt
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 import warnings
 import tensorflow as tf
@@ -34,15 +34,16 @@ class LstmData:
         self.y_wl_onehot_scaler = OneHotEncoder(sparse_output=False)
         self.y_wl_label_encoder = LabelEncoder()
 
-    def prep_train_test_data(self, load_scalers):
+    def prep_train_test_data(self, load_scalers, resample_tf):
         self.set_x_train_test_datasets()
         self.scale_x_data(load_scalers)
         if self.ph.setup_params.model_type == 'mdn_lstm':
             self.scale_y_pnl_data(load_scalers)
         else:
-            self.onehot_y_wl_data()
+            self.onehot_y_wl_data(resample_tf)
 
         self.merge_x_y()
+
 
     def set_x_train_test_datasets(self):
         print('\nBuilding X-Train and Test Datasets')
@@ -115,7 +116,7 @@ class LstmData:
             pnl_scaled = self.y_pnl_scaler.transform(self.y_test_df.iloc[:, 1].values.reshape(-1, 1))
             self.y_test_df.iloc[:, 1] = pnl_scaled.reshape(-1, 1)
 
-    def onehot_y_wl_data(self):
+    def onehot_y_wl_data(self, resample_tf=False):
         print('\nOnehotting WL Data')
 
         def encode_dataframe(df, scaler):
@@ -132,6 +133,9 @@ class LstmData:
             return df
 
         self.y_train_df = self.ph.trade_data.y_train_df.copy(deep=True)
+        if resample_tf:
+            self.y_train_df = balance_y_trades(self.y_train_df)
+
         train_labels = self.y_train_df.iloc[:, 1].values.reshape(-1, 1)
         wl_dat = self.y_wl_onehot_scaler.fit_transform(train_labels)
         label_names = self.y_wl_onehot_scaler.get_feature_names_out()
@@ -167,3 +171,31 @@ class LstmData:
         self.xy_test_intra.iloc[:, -ncols:] = self.xy_test_intra.iloc[:, -ncols:].shift()
         self.xy_test_intra = self.xy_test_intra.fillna(0)
         self.xy_test_intra.drop(columns='Label', inplace=True)
+
+
+def balance_y_trades(y_df):
+    """
+    Balance y_df that contains both string labels and timestamps.
+
+    Parameters:
+    - y_df (pd.DataFrame): DataFrame with 'Label' (string) and 'Timestamp'.
+
+    Returns:
+    - Resampled y_df with balanced classes and aligned timestamps.
+    """
+    y_labels = y_df['Label'].astype(str)
+    y_with_index = pd.DataFrame({'index': y_df.index, 'Label': y_labels})
+
+    oversampler = RandomOverSampler()
+    y_with_index, y_labels_resampled = oversampler.fit_resample(y_with_index, y_labels)
+
+    resampled_indices = y_with_index['index']
+    y_timestamps_resampled = y_df.loc[resampled_indices, 'DateTime'].values
+
+    resampled_df = pd.DataFrame({
+        'DateTime': y_timestamps_resampled,
+        'Label': y_labels_resampled
+    })
+
+    return resampled_df
+

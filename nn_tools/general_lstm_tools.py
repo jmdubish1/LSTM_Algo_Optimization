@@ -1,13 +1,16 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.utils import Sequence
 from typing import TYPE_CHECKING
+import math
+import random
 
 if TYPE_CHECKING:
     from nn_tools.process_handler import ProcessHandler
 
 
 class BufferedBatchGenerator:
-    def __init__(self, process_handler, buffer_size=50, train=True):
+    def __init__(self, process_handler, buffer_size=50, train=True, randomize=False):
         # buffer_size: number of batches to load at once, e.g. 50
         self.ph = process_handler
         self.batch_size = self.ph.lstm_model.batch_s  # should be 16
@@ -20,13 +23,16 @@ class BufferedBatchGenerator:
         self._current_buffer_data = None  # will hold arrays for x_day, x_intra, y
         self._current_sample_index = 0  # global sample index across all samples
 
-        self.set_attributes()
+        self.set_attributes(randomize)
 
-    def set_attributes(self):
+    def set_attributes(self, randomize=False):
         ncols = self.ph.setup_params.num_y_cols
         hot_enc = (self.ph.lstm_data.xy_train_intra if self.train_tf
                    else self.ph.lstm_data.xy_test_intra).iloc[:, -ncols:]
         self.sample_ind_list = hot_enc[hot_enc.any(axis=1)].index.tolist()
+
+        if randomize and self.train_tf:
+            random.shuffle(self.sample_ind_list)
 
         self.n_samples = len(self.sample_ind_list)
 
@@ -38,7 +44,12 @@ class BufferedBatchGenerator:
         self._current_buffer_data = None
         self._current_sample_index = 0
 
-        # Iterate until we cover all samples
+        return self
+
+    def __next__(self):
+        if self._current_sample_index >= self.n_samples:
+            raise StopIteration
+
         while self._current_sample_index < self.n_samples:
             # Compute the buffer index for the current sample index
             buffer_index = self._current_sample_index // (self.buffer_size * self.batch_size)
@@ -143,5 +154,46 @@ class BufferedBatchGenerator:
                                                            y_full)).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
 
         return full_dataset
+
+
+class BufferedBatchSequence(Sequence):
+    def __init__(self, process_handler, buffer_size=50, train=True, randomize=False):
+        self.generator = BufferedBatchGenerator(process_handler, buffer_size, train, randomize)
+
+    def __len__(self):
+        return len(self.generator)
+
+    def __getitem__(self, index):
+        return next(self.generator)
+
+    def on_epoch_end(self):
+        # Shuffle at the end of each epoch if needed
+        self.generator.set_attributes(randomize=True)
+
+
+def one_cycle_lr(initial_lr, total_epochs):
+    """
+    Returns a callable One Cycle Learning Rate Scheduler.
+
+    Parameters:
+    - initial_lr (float): Peak learning rate.
+    - total_epochs (int): Total number of epochs.
+
+    Returns:
+    - A function that computes the learning rate for each epoch.
+    """
+    max_lr = initial_lr  # Peak learning rate
+    min_lr = .0000005  # Minimum learning rate
+
+    def schedule(epoch, lr):
+        if epoch < total_epochs // 2:
+            # Increase learning rate linearly to the peak
+            return min_lr + (max_lr - min_lr) * (epoch / (total_epochs // 2))
+        else:
+            # Decrease learning rate following a cosine decay
+            return min_lr + (max_lr - min_lr) * \
+                   (1 + math.cos(math.pi * (epoch - total_epochs // 2) / (total_epochs // 2))) / 2
+
+    return schedule
 
 

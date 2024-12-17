@@ -131,22 +131,14 @@ class ProcessHandler:
 
         return load_scalers
 
-    def ph_train_model(self, ind):
+    def ph_train_model(self, ind, randomize_tf):
         if not self.prior_traintf:
             self.lstm_model.build_compile_model()
         else:
             print(f'Loaded Previous Model')
-        profiler = cProfile.Profile()
-        profiler.enable()
-        self.lstm_model.train_model(ind, previous_train=self.previous_train_path)
-        profiler.disable()
-        profiler_file = "profile_results.prof"
-        profiler.dump_stats(profiler_file)
+        self.lstm_model.train_model(randomize_tf)
 
-        with open("profile_readable.txt", "w") as file:
-            stats = pstats.Stats("profile_results.prof", stream=file)
-            stats.sort_stats('cumulative').print_stats()
-
-        # self.save_handler.save_model(ind)
+        self.save_handler.save_model(ind)
+        self.save_handler.save_scalers()
 
 

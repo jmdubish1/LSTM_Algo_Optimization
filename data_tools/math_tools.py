@@ -133,15 +133,15 @@ def garch_modeling(df, sec):
         print(f'...{sec}_{met}')
         temp_df = df[f'{sec}_{met}']
         temp_df = rescale_data_to_range(temp_df, 500)
-        # garch_m = arch_model(temp_df, vol='GARCH', p=1, q=1)
-        # garch_fit = garch_m.fit(disp='off')
-        # df[f'{sec}_{met}_garch_cv'] = garch_fit.conditional_volatility
-        # df[f'{sec}_{met}_garch_std'] = garch_fit.std_resid
-
-        garch_m = arch_model(temp_df, vol='EGARCH', p=1, o=1, q=1)
+        garch_m = arch_model(temp_df, vol='GARCH', p=1, q=1)
         garch_fit = garch_m.fit(disp='off')
-        df[f'{sec}_{met}_egarch_cv'] = garch_fit.conditional_volatility
-        df[f'{sec}_{met}_egarch_std'] = garch_fit.std_resid
+        df[f'{sec}_{met}_garch_cv'] = garch_fit.conditional_volatility
+        df[f'{sec}_{met}_garch_std'] = garch_fit.std_resid
+
+        # garch_m = arch_model(temp_df, vol='EGARCH', p=1, o=1, q=1)
+        # garch_fit = garch_m.fit(disp='off')
+        # df[f'{sec}_{met}_egarch_cv'] = garch_fit.conditional_volatility
+        # df[f'{sec}_{met}_egarch_std'] = garch_fit.std_resid
 
     return df
 
@@ -156,7 +156,8 @@ def rescale_data_to_range(df, max_range=1000):
     return temp_df_scaled
 
 
-def compute_loss_penalty_matrix(df, classes):
+def compute_loss_penalty_matrix(df):
+    classes = np.unique(df['Label'])
     penalty_matrix = np.zeros((len(classes), len(classes)))
     avg_pnl_per_class = df.groupby("Label")["PnL"].mean()
     avg_pnl_per_class = avg_pnl_per_class.reindex(classes, fill_value=0)
@@ -171,8 +172,116 @@ def compute_loss_penalty_matrix(df, classes):
         print("The sum of the lower triangle in the penalty matrix is zero. Cannot normalize.")
         return penalty_matrix
 
-    penalty_matrix /= lower_triangle_sum
+    penalty_matrix /= (lower_triangle_sum * 2)
     penalty_matrix += 1
 
     p_matrix = pd.DataFrame(penalty_matrix, index=classes, columns=classes)
+    print(p_matrix)
+    # breakpoint()
     return p_matrix
+
+
+def calculate_max_drawdown(pnl_series):
+    draw_list = [0]
+    arr = pnl_series.values
+    for i in range(1, len(arr)):
+        prev_max = np.max(arr[:i])
+        draw_list.append(min(0, arr[i] - prev_max, arr[i-1]))
+
+    if len(draw_list) > 1:
+        draw_list.pop(0)
+        draw_list.append(draw_list[-1])
+
+    return draw_list
+
+
+def calculate_algo_lstm_ratio(algo_series, lstm_series, max_lever):
+    draw_ratio_list = [1]
+    algo_arr = algo_series.values
+    lstm_arr = lstm_series.values
+    for i in range(1, (len(algo_arr))):
+        start_ind = max(0, i-50)
+        if np.min(lstm_arr[start_ind:i]) == 0:
+            draw_ratio_list.append(1)
+        else:
+            algo_1 = algo_arr[start_ind:i]
+            algo_1 = algo_1[algo_1 != 0]
+
+            lstm_1 = lstm_arr[start_ind:i]
+            lstm_1 = lstm_1[lstm_1 != 0]
+
+            if (len(lstm_1) == 0) or (len(algo_1) == 0):
+                draw_ratio_list.append(draw_ratio_list[-1])
+            else:
+                max_draw = np.median(algo_1)/np.median(lstm_1)
+                draw_ratio_list.append(max(1, min(max_draw, max_lever)))
+
+    return draw_ratio_list
+
+
+def sortino_ratio(returns, risk_free_rate=0, target_return=0):
+    """
+    Calculate the Sortino Ratio for a series of returns.
+
+    Parameters:
+    - returns (array-like): Array or list of portfolio returns.
+    - risk_free_rate (float): The risk-free rate of return (default is 0).
+    - target_return (float): The target return (default is 0, same as the risk-free rate).
+
+    Returns:
+    - float: The Sortino Ratio.
+    """
+    returns = np.array(returns)
+
+    excess_return = np.mean(returns) - risk_free_rate
+
+    downside_returns = returns[returns < target_return]
+    downside_deviation = np.sqrt(np.mean((downside_returns - target_return) ** 2)) if len(
+        downside_returns) > 0 else np.nan
+
+    if downside_deviation > 0:
+        sortino = excess_return / downside_deviation
+    else:
+        sortino = np.nan
+
+    return sortino
+
+
+def find_percentile_for_percent_sum(arr, percentile):
+    """
+    Find the percentile threshold where the sum of elements greater than
+    this threshold equals or exceeds 50% of the total sum of the array.
+
+    Parameters:
+    - arr (array-like): Input array of numerical values.
+
+    Returns:
+    - percentile (float): The percentile threshold.
+    """
+    arr = np.array(arr)  # Ensure the input is a numpy array
+    total_sum = np.sum(arr)  # Calculate total sum
+    half_sum = total_sum * percentile/100  # 50% of the total sum
+
+    # Sort the array in descending order
+    sorted_arr = np.sort(arr)[::-1]
+
+    cumulative_sum = 0  # To track running cumulative sum
+    threshold = None  # To store the threshold value
+
+    for val in sorted_arr:
+        cumulative_sum += val
+        if cumulative_sum >= half_sum:
+            threshold = val
+            break
+
+    # Calculate the percentile of the threshold value
+    # percentile = np.percentile(arr, 100 * (np.sum(arr > threshold) / len(arr)))
+
+    return threshold
+
+
+def clip_array(arr, low_percentile=1, high_percentile=99):
+    clip_low = np.percentile(arr, low_percentile)
+    clip_high = np.percentile(arr, high_percentile)
+
+    return np.clip(arr, clip_low, clip_high)

@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import data_tools.general_tools as gt
 import sys
+from data_tools.math_tools import find_percentile_for_percent_sum, clip_array
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -65,27 +66,30 @@ class TradeData:
         self.trade_df['PnL'] = self.trade_df['PnL']/self.trade_df['entryPrice'] * 100
 
     def set_pnl_label(self):
-        low_percentile = self.ph.setup_params.percentiles['low']
-        high_percentile = self.ph.setup_params.percentiles['high']
-        self.y_train_df['Label'] = np.empty(len(self.working_df), dtype=object)
-        pnl_arr = self.y_train_df['PnL'].values
-        percentile_low = np.percentile(pnl_arr, low_percentile)
-        percentile_high = np.percentile(pnl_arr, high_percentile)
+        low_percentile = self.ph.setup_params.percentiles['loss']
+        high_percentile = self.ph.setup_params.percentiles['win']
+        self.working_df['Label'] = np.empty(len(self.working_df), dtype=object)
+
+        temp_df = self.working_df[self.working_df['DateTime'] <= self.start_period_test_date]
+        pnl_arr = temp_df['PnL'].values
+        pnl_arr = clip_array(pnl_arr, 5, 95)
+        threshold_low = -find_percentile_for_percent_sum(-pnl_arr[pnl_arr < 0], low_percentile)
+        threshold_high = find_percentile_for_percent_sum(pnl_arr[pnl_arr > 0], high_percentile)
 
         if len(self.ph.setup_params.classes) == 3:
-            conds = [(self.working_df['PnL'] <= percentile_low),
-                     (self.working_df['PnL'] < percentile_high) &
-                     (self.working_df['PnL'] > percentile_low),
-                     (self.working_df['PnL'] >= percentile_high)]
+            conds = [(self.working_df['PnL'] <= threshold_low),
+                     (self.working_df['PnL'] < threshold_high) &
+                     (self.working_df['PnL'] > threshold_low),
+                     (self.working_df['PnL'] >= threshold_high)]
             labels = ['lg_loss', 'skip', 'lg_win']
             default = 'skip'
             self.working_df.loc[self.working_df.index, 'Label'] = np.select(conds, labels, default=default)
 
         else:
-            conds = [(self.working_df['PnL'] <= percentile_low),
-                     (self.working_df['PnL'] > percentile_low) & (self.working_df['PnL'] <= 0),
-                     (self.working_df['PnL'] < percentile_high) & (self.working_df['PnL'] > 0),
-                     (self.working_df['PnL'] >= percentile_high)]
+            conds = [(self.working_df['PnL'] <= threshold_low),
+                     (self.working_df['PnL'] > threshold_low) & (self.working_df['PnL'] <= 0),
+                     (self.working_df['PnL'] < threshold_high) & (self.working_df['PnL'] > 0),
+                     (self.working_df['PnL'] >= threshold_high)]
             labels = ['lg_loss', 'sm_loss', 'sm_win', 'lg_win']
             default = 'sm_loss'
             self.working_df.loc[self.working_df.index, 'Label'] = np.select(conds, labels, default=default)
@@ -102,8 +106,6 @@ class TradeData:
     def separate_train_test(self):
         print('\nSeparating Train-Test')
         self.subset_test_period()
-        if self.ph.setup_params.model_type == 'mdn_lstm':
-            self.clip_pnl(low_percentile=1, high_percentile=99)
         train_df = self.working_df[self.working_df['DateTime'] <= self.start_period_test_date]
         self.train_dates = list(np.unique(train_df['DateTime'].dt.date))
         self.y_train_df = train_df
@@ -124,21 +126,18 @@ class TradeData:
 
         return add_days
 
-    def clip_pnl(self, low_percentile=1, high_percentile=99):
-        pnl_arr = np.array(self.working_df['PnL'])
-        percentile_5 = np.percentile(pnl_arr, low_percentile)
-        percentile_95 = np.percentile(pnl_arr, high_percentile)
-        self.working_df['PnL'] = np.clip(pnl_arr, percentile_5, percentile_95)
-
     def subset_test_period(self):
         self.working_df = self.working_df[(self.working_df['DateTime'].dt.date <= self.curr_test_date.date())]
-        self.analysis_df = self.working_df.copy(deep=True)
         if self.ph.setup_params.model_type == 'mdn_lstm':
             self.working_df = self.working_df[['DateTime', 'PnL']].reset_index(drop=True)
+            self.analysis_df = self.working_df.copy(deep=True)
             self.analysis_df['Algo_PnL'] = np.array(self.analysis_df['PnL'])
         else:
-            self.working_df = self.working_df[['DateTime', 'Label']]
-            self.analysis_df['Algo_PnL'] = np.array(self.analysis_df['Label'])
+            self.analysis_df = self.working_df.copy(deep=True)
+            self.working_df = self.working_df[['DateTime', 'PnL', 'Label']]
+
+            self.analysis_df['Algo_label'] = np.array(self.analysis_df['Label'])
+            self.analysis_df['PnL'] = self.analysis_df['PnL'] * self.analysis_df['entryPrice'] / 100
 
     def clear_trade_data(self):
         self.curr_test_date = None

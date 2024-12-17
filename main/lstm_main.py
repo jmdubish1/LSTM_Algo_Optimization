@@ -25,7 +25,7 @@ setup_dict = {
     'model_type': 'classification_lstm',
     'strategy': 'Double_Candle',
     'security': 'NQ',
-    'other_securities': ['RTY', 'YM', 'ES'],  #, 'GC', 'CL'],
+    'other_securities': [],  #['RTY', 'YM', 'ES'],  #, 'GC', 'CL'],
     'sides': ['Bull'],
     'time_frame_test': '15min',
     'time_frame_train': '15min',
@@ -40,29 +40,29 @@ setup_dict = {
     'years_to_train': 3,
     'sample_percent': 1,
     'total_param_sets': 289,
-    'chosen_params': {'Bull': [104, 108, 12, 120, 14, 188, 234, 24, 252, 44, 76],
+    'chosen_params': {'Bull': [104, 108, 12, 120, 14, 188, 234, 24, 252, 44, 92],
                       'Bear': [100, 118, 124, 160, 26, 32, 34, 40, 74]},
-    'percentiles': {'low': 35,
-                    'high': 80},
+    'percentiles': {'loss': 40,
+                    'win': 50},
     'classes': ['lg_loss', 'sm_loss', 'sm_win', 'lg_win']
 }
 
 lstm_model_dict = {
     'intra_lookback': 18,
-    'daily_lookback': 24,
+    'daily_lookback': 18,
     'plot_live': True,
-    'epochs': {'Bull': 75,
-               'Bear': 45},
-    'batch_size': 64,
-    'buffer_batch_num': 1500,  # Exact number of trades to pull at once
+    'epochs': {'Bull': 65,
+               'Bear': 65},
+    'batch_size': 16,
+    'buffer_batch_num': 100,  # Exact number of trades to pull at once
     'max_accuracy': .5,
-    'lstm_i1_nodes': 64,
-    'lstm_i2_nodes': 32,
-    'dense_m1_nodes': 32,
-    'dense_wl1_nodes': 16,
-    'dense_pl1_nodes': 16,
-    'adam_optimizer': .0001,
-    'prediction_runs': 1,
+    'lstm_i1_nodes': 512,
+    'lstm_i2_nodes': 256,
+    'dense_m1_nodes': 384,
+    'dense_wl1_nodes': 112,
+    'dense_pl1_nodes': 112,
+    'adam_optimizer': .00005,
+    'prediction_runs': 50,
     'opt_threshold': {'Bull': .50,
                       'Bear': .50},
     'temperature': {'Bull': 1.0,
@@ -72,8 +72,9 @@ lstm_model_dict = {
 train_dict = {
     'predict_tf': True,
     'retrain_tf': False,
-    'use_prev_period_model': True,
-    'train_bad_params': False
+    'use_prev_period_model': False,
+    'train_bad_params': True,
+    'over_sample_y': True
 }
 
 def main():
@@ -92,7 +93,8 @@ def main():
         trade_data = TradeData(ph)
         valid_params = param_chooser.valid_param_list(train_bad_params)
 
-        for ph.paramset_id in valid_params[0:1]:
+        for ph.paramset_id in valid_params:
+            print(f'Working Paramset: {ph.paramset_id}')
             MktDataWorking(ph)
             if ph.setup_params.model_type == 'classification_lstm':
                 lstm_model = ClassLstmModel(ph, lstm_model_dict)
@@ -114,15 +116,17 @@ def main():
                 ph.decide_model_to_train(test_date, use_prev_period_model)
                 ph.decide_load_prior_model()
                 load_scalers = ph.decide_load_scalers()
-                ph.lstm_model.modify_op_threshold_temp(ind, mod_thres=True)
 
                 if ph.train_modeltf:
-                    lstm_data.prep_train_test_data(load_scalers)
+                    lstm_data.prep_train_test_data(load_scalers, train_dict['over_sample_y'])
                     param_chooser.adj_lstm_training_nodes()
-                    ph.ph_train_model(ind)
-                    ModelOutputData(ph)
-                    ph.model_output_data.predict_data()
+                    ph.ph_train_model(ind, train_dict['over_sample_y'])
 
+                    model_output_data = ModelOutputData(ph)
+                    model_output_data.predict_data()
+                    predicted_data = model_output_data.prediction_analysis()
+                    save_handler.save_all_prediction_data(test_date, predicted_data)
+                    # breakpoint()
 
 
 if __name__ == '__main__':

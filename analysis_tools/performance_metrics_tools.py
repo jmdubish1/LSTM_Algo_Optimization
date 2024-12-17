@@ -100,17 +100,6 @@ class ModelPerformanceMetrics:
 
         self.analysis_df = df
 
-    def build_allocation_columns(self):
-        self.analysis_df[f'{self.param_id}_PnL_Total'] = self.analysis_df[f'{self.param_id}_PnL'].cumsum()
-        self.analysis_df[f'{self.param_id}_MaxDraw'] = (
-            mt.calculate_max_drawdown(self.analysis_df[f'{self.param_id}_PnL_Total']))
-
-        self.analysis_df = self.analysis_df[['DateTime', 'strat', f'{self.param_id}_PnL',
-                                             f'{self.param_id}_PnL_Total', f'{self.param_id}_MaxDraw']]
-        self.analysis_df['DateTime'] = pd.to_datetime(self.analysis_df['DateTime'],
-                                                      format='%Y-%m-%d %HH:%MM:%SS', errors='coerce')
-        self.analysis_df = self.analysis_df.dropna(subset='DateTime')
-
     def set_allo_metrics(self, save_path):
         wb = load_workbook(save_path)
         if f'{self.param_id}_Allo_metrics' in wb.sheetnames:
@@ -265,74 +254,40 @@ class ModelPerformanceMetrics:
 
 
 def arrange_model_columns(df):
-    priority_columns = ['DateTime', 'Close', 'Algo_wl', 'Pred_wl']
+    priority_columns = ['DateTime', 'Close', 'Algo_label', 'Pred_wl']
     existing_priority_columns = [col for col in priority_columns if col in df.columns]
     remaining_columns = [col for col in df.columns if col not in existing_priority_columns]
     df = df[existing_priority_columns + remaining_columns]
 
     return df
 
-
-def rename_cols(df, param_id):
-    """Should be a method"""
-    if 'Two_Dir_Pred_Pnl_Total' in df.columns:
-        df.drop(columns=['Two_Dir_Pred_Pnl_Total'], inplace=True)
-        column_to_move = df.pop('Two_Dir_Pred_PnL_Total')
-        df.insert(len(df.columns) - 1, 'Two_Dir_Pred_PnL_Total', column_to_move)
-
-    col_dict = {}
-    cols_to_rename = df.columns
-    for col in cols_to_rename:
-        if col not in ['DateTime', 'Close']:
-            col_dict[f'{col}'] = f'{param_id}_{col}'
-
-    df.rename(columns=col_dict, inplace=True)
-
-    return df
-
-
-def create_rolling_sum(df):
-    pnl_cols = ["Algo", "Pred", "Two_Dir_Pred"]
-    for col in pnl_cols:
-        df[f'{col}_PnL_Total'] = df[f'{col}_PnL'].cumsum()
-        df[f'{col}_MaxDraw'] = mt.calculate_max_drawdown(df[f'{col}_PnL_Total'])
-
-    return df
-
-
-def create_rolling_sum_agged(df, param):
-    df[f'{param}_PnL_Total'] = df[f'PnL'].cumsum()
-
-    return df
-
-
-def add_sheet_excel(df, sheet_name, file_path):
-    if os.path.exists(file_path):
-        workbook = load_workbook(file_path)
-        if sheet_name in workbook.sheetnames:
-            del workbook[sheet_name]
-
-        with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists='replace') as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-    else:
-        combined_df.to_excel(file_path, sheet_name=sheet_name, index=False)
-
-
-perfmet = AllocationMetrics(setup_dict1)
-perfmet.get_models_to_test()
-for param in perfmet.params_to_test:
-    print(f'Analyzing: {param}')
-    combined_df = perfmet.load_concat_datasets(param)
-    combined_df = create_rolling_sum(combined_df)
-    combined_df = rename_cols(combined_df, param)
-    save_path = f'{perfmet.model_dat_folder}\\Agg_Data\\agg_data_{perfmet.side}_{param}.xlsx'
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    add_sheet_excel(combined_df, f'{param}_Full_data', save_path)
-
-    model_met = ModelPerformanceMetrics(combined_df, param)
-    model_met.concat_dfs()
-    model_met.build_allocation_columns()
-    add_sheet_excel(model_met.analysis_df, f'{param}_agged', save_path)
-    model_met.set_allo_metrics(save_path)
-    model_met.agged_excel_work(save_path)
+# def add_sheet_excel(df, sheet_name, file_path):
+#     if os.path.exists(file_path):
+#         workbook = load_workbook(file_path)
+#         if sheet_name in workbook.sheetnames:
+#             del workbook[sheet_name]
+#
+#         with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists='replace') as writer:
+#             df.to_excel(writer, sheet_name=sheet_name, index=False)
+#
+#     else:
+#         combined_df.to_excel(file_path, sheet_name=sheet_name, index=False)
+#
+#
+# perfmet = AllocationMetrics(setup_dict1)
+# perfmet.get_models_to_test()
+# for param in perfmet.params_to_test:
+#     print(f'Analyzing: {param}')
+#     combined_df = perfmet.load_concat_datasets(param)
+#     combined_df = create_rolling_sum(combined_df)
+#     combined_df = rename_cols(combined_df, param)
+#     save_path = f'{perfmet.model_dat_folder}\\Agg_Data\\agg_data_{perfmet.side}_{param}.xlsx'
+#     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+#     add_sheet_excel(combined_df, f'{param}_Full_data', save_path)
+#
+#     model_met = ModelPerformanceMetrics(combined_df, param)
+#     model_met.concat_dfs()
+#     model_met.build_allocation_columns()
+#     add_sheet_excel(model_met.analysis_df, f'{param}_agged', save_path)
+#     model_met.set_allo_metrics(save_path)
+#     model_met.agged_excel_work(save_path)

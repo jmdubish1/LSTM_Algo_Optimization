@@ -7,7 +7,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, Concatenate
 from tensorflow.keras.optimizers import Adam
-from keras.regularizers import l2
+from keras.regularizers import l2, L1L2
 from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from sklearn.utils.class_weight import compute_class_weight
@@ -72,9 +72,10 @@ class ClassLstmModel:
         self.model.summary()
 
     def get_class_weights(self):
-        y_labels = self.ph.trade_data.y_train_df['Label']
+        y_labels = self.ph.lstm_data.y_train_df['Label']
+        uniq_y = np.unique(y_labels)
 
-        label_to_index = {label: idx for idx, label in enumerate(np.unique(y_labels))}
+        label_to_index = {label: idx for idx, label in enumerate(uniq_y)}
         numeric_labels = y_labels.map(label_to_index)
 
         class_weights = compute_class_weight(
@@ -83,8 +84,14 @@ class ClassLstmModel:
             y=numeric_labels)
 
         class_weight_dict = {idx: weight for idx, weight in enumerate(class_weights)}
+        class_weight_print = {label: weight for label, weight, in zip(label_to_index.keys(), class_weights)}
 
-        print(f'Class Weights: {class_weight_dict}\n')
+        for key, val in class_weight_dict.items():
+            if class_weight_dict[key] == class_weight_print['lg_win']:
+                class_weight_dict[key] = class_weight_print['lg_win'] * 1.15
+                class_weight_print['lg_win'] = class_weight_print['lg_win'] * 1.15
+
+        print(f'Class Weights: {class_weight_print}\n')
         return class_weight_dict
 
     def get_input_shapes(self):
@@ -94,40 +101,32 @@ class ClassLstmModel:
 
         self.input_shapes = (daily_shape, intraday_shape)
 
-    def train_model(self, i, previous_train):
-        if previous_train:
-            if i == 1:
-                epochs = int(self.epochs / 4)
-                acc_threshold = self.lstm_dict['max_accuracy'] + .01
-                self.model.optimizer.learning_rate.assign(self.lstm_dict['adam_optimizer'] / 5)
-            else:
-                epochs = int(self.epochs / 4)
-                acc_threshold = self.lstm_dict['max_accuracy'] + .01
-                self.model.optimizer.learning_rate.assign(self.lstm_dict['adam_optimizer'] / 5)
-        else:
-            epochs = self.epochs
-            acc_threshold = self.max_acc
+    def train_model(self, randomize_tf=False):
+        epochs = self.epochs
+        acc_threshold = self.max_acc
 
-        lr_scheduler = ReduceLROnPlateau(monitor='loss',
-                                         factor=0.85,
-                                         patience=3,
-                                         min_lr=.00000025,
-                                         cooldown=3,
-                                         verbose=2)
+        # lr_scheduler = ReduceLROnPlateau(monitor='loss',
+        #                                  factor=0.50,
+        #                                  patience=1,
+        #                                  min_lr=.00000025,
+        #                                  cooldown=3,
+        #                                  verbose=2)
         self.model_plot = LivePlotLossesMDN(plot_live=self.lstm_dict['plot_live'])
 
-        train_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=True)
-        train_gen = train_gen.load_full_dataset()
-        test_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=False)
+        train_gen = glt.BufferedBatchSequence(self.ph, self.buffer, train=True, randomize=randomize_tf)
+        # train_gen = train_gen.load_full_dataset()
+        test_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=False, randomize=randomize_tf)
         test_gen = test_gen.load_full_dataset()
 
         stop_at_accuracy = StopAtAccuracy(accuracy_threshold=acc_threshold)
         class_weights = self.get_class_weights()
+        one_cyc_lr_fn = glt.one_cycle_lr(self.lstm_dict['adam_optimizer'], self.epochs)
+        one_cyc_lr = tf.keras.callbacks.LearningRateScheduler(one_cyc_lr_fn)
         self.model.fit(train_gen,
                        epochs=epochs,
                        verbose=1,
                        validation_data=test_gen,
-                       callbacks=[lr_scheduler, self.model_plot, stop_at_accuracy],
+                       callbacks=[one_cyc_lr, self.model_plot, stop_at_accuracy],
                        shuffle=False,
                        class_weight=class_weights)
         self.model_plot.save_plot(self.ph.save_handler.data_folder, self.ph.paramset_id)
@@ -138,7 +137,6 @@ class ClassLstmModel:
 
         self.model = Model(inputs=[self.input_layer_daily, self.input_layer_intraday],
                            outputs=self.win_loss_output)
-
         penalty_cat_crossentropy = penalized_categorical_crossentropy(self.penalty_matrix)
         self.model.compile(optimizer=self.optimizer,
                            loss=penalty_cat_crossentropy)
@@ -151,17 +149,17 @@ class ClassLstmModel:
         self.input_layer_daily = Input(self.input_shapes[0],
                                        name='daily_input_layer')
 
-        lstm_d1 = LSTM(units=24,
+        lstm_d1 = LSTM(units=96,
                        activation='tanh',
                        recurrent_activation='sigmoid',
                        return_sequences=True,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.001),
+                       kernel_regularizer=l2(0.01),
                        name='lstm_d1')(self.input_layer_daily)
 
         drop_d1 = Dropout(0.05, name='drop_d1')(lstm_d1)
 
-        lstm_d2 = LSTM(units=16,
+        lstm_d2 = LSTM(units=48,
                        activation='tanh',
                        recurrent_activation='sigmoid',
                        return_sequences=False,
@@ -177,7 +175,7 @@ class ClassLstmModel:
                        recurrent_activation='sigmoid',
                        return_sequences=True,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.001),
+                       kernel_regularizer=l2(0.01),
                        name='lstm_i1')(self.input_layer_intraday)
 
         drop_i1 = Dropout(0.05, name='drop_i1')(lstm_i1)
@@ -194,7 +192,7 @@ class ClassLstmModel:
                                   name='concatenate_timesteps')([lstm_d2, lstm_i2], )
 
         dense_m1 = Dense(units=self.lstm_dict['dense_m1_nodes'],
-                         activation='tanh',
+                         activation='sigmoid',
                          kernel_initializer=GlorotUniform(),
                          kernel_regularizer=l2(0.01),
                          name='dense_m1')(merged_lstm)
@@ -235,27 +233,10 @@ class ClassLstmModel:
 
         self.model_summary = df_summary
 
-    def modify_op_threshold_temp(self, ind, mod_thres=True):
-        if ind == 0:
-            self.opt_threshold = self.lstm_dict['opt_threshold'][self.ph.side]
-            self.temperature = self.lstm_dict['temperature'][self.ph.side]
-        else:
-            opt_df = pd.read_excel(f'{self.ph.save_handler.param_folder}\\best_thresholds.xlsx')
-
-            self.temperature = \
-                (opt_df.loc[(opt_df['side'] == self.ph.side) &
-                            (opt_df['paramset_id'] == self.ph.paramset_id), 'opt_temp'].values)[0]
-
-            if mod_thres:
-                self.opt_threshold = \
-                    (opt_df.loc[(opt_df['side'] == self.ph.side) &
-                                (opt_df['paramset_id'] == self.ph.paramset_id), 'opt_threshold'].values)[0]
-            else:
-                self.opt_threshold = self.lstm_dict['opt_threshold'][self.ph.side]
-
     def get_loss_penalty_matrix(self):
-        self.penalty_matrix = compute_loss_penalty_matrix(self.ph.trade_data.y_train_df,
-                                                          self.ph.setup_params.classes)
+        self.penalty_matrix = compute_loss_penalty_matrix(self.ph.trade_data.y_train_df)
+        self.ph.trade_data.y_train_df.drop(columns='PnL', inplace=True)
+        self.ph.trade_data.y_test_df.drop(columns='PnL', inplace=True)
 
 
 

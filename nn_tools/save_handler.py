@@ -8,6 +8,7 @@ import nn_tools.loss_functions as lf
 from nn_tools.custom_callbacks_layers import TemperatureScalingLayer
 import keras
 import pickle
+import re
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -53,13 +54,14 @@ class SaveHandler:
         self.check_create_model_folder()
 
         previous_test_date = pd.to_datetime(test_date) - timedelta(days=self.ph.setup_params.test_period_days)
-        previous_test_date = previous_test_date.strftime(format='%Y-%m-%d')
+        previous_test_date = previous_test_date.strftime(format='%Y-%m-%d')[:11]
         self.test_date = test_date
+        test_date = test_date.strftime(format='%Y-%m-%d')[:11]
 
         self.model_save_path = \
-            f'{self.model_folder}\\{self.ph.side}_{self.ph.paramset_id}\\param_{self.test_date}_model'
+            f'{self.model_folder}\\{self.ph.side}_{self.ph.paramset_id}\\{test_date}_model'
         self.previous_model_path = \
-            f'{self.model_folder}\\{self.ph.side}_{self.ph.paramset_id}\\param_{previous_test_date}_model'
+            f'{self.model_folder}\\{self.ph.side}_{self.ph.paramset_id}\\{previous_test_date}_model'
 
     def save_model(self, i):
         print(f'Model Saved: {self.model_save_path}')
@@ -68,29 +70,13 @@ class SaveHandler:
             self.ph.lstm_model.model.save(f'{self.main_train_path}\\model.keras')
 
     def load_model(self, model_path):
-        threshold = self.ph.lstm_model.opt_threshold
         if self.ph.setup_params.model_type == 'classification_lstm':
-            class_weights = self.ph.lstm_model.get_class_weights()
-            combined_wl_loss = lf.comb_class_loss(beta=2.0,
-                                                  opt_threshold=threshold,
-                                                  class_weights=class_weights)
-            npv_fn = lf.negative_predictive_value(threshold)
-            focal_loss_fn = lf.focal_loss()
-            huber_loss = lf.weighted_huber_loss()
-            auc = lf.weighted_auc(class_weights)
-            ppv_fn = lf.positive_predictive_value(threshold)
+            penalty_cat_crossentropy = lf.penalized_categorical_crossentropy(self.ph.lstm_model.penalty_matrix)
 
             self.ph.lstm_model.model = (
                 keras.models.load_model(f'{model_path}',
-                                        custom_objects={'focal_loss_fixed': focal_loss_fn,
-                                                        'combined_wl_loss': combined_wl_loss,
-                                                        'npv': npv_fn,
-                                                        'ppv': ppv_fn,
-                                                        'auc_loss': auc,
-                                                        'huber_loss': huber_loss,
-                                                        'TemperatureScalingLayer': TemperatureScalingLayer
-                                                        }))
-            self.ph.lstm_model.model.load_weights(f'{self.model_save_path}\\model.keras')
+                                        custom_objects={'loss_fn': penalty_cat_crossentropy}))
+            self.ph.lstm_model.model.load_weights(f'{model_path}')
 
     def load_prior_test_date_model(self):
         model_path = f'{self.previous_model_path}\\model.keras'
@@ -142,12 +128,11 @@ class SaveHandler:
         else:
             pass
 
-    def save_all_prediction_data(self, side, param, test_date, model_dfs, trade_dfs):
-        self.save_metrics(side, param, test_date, model_dfs, 'Model')
-        self.save_metrics(side, param, test_date, trade_dfs[0], 'WL')
-        self.save_metrics(side, param, test_date, trade_dfs[1], 'PnL')
+    def save_all_prediction_data(self, test_date, model_dfs):
+        self.save_metrics(self.ph.side, self.ph.paramset_id, test_date, model_dfs[1], 'Model')
+        self.save_metrics(self.ph.side, self.ph.paramset_id, test_date, model_dfs[0], 'PnL')
         if self.ph.train_modeltf and not self.ph.retraintf:
-            self.save_plot_to_excel(side)
+            self.save_plot_to_excel(self.ph.side)
 
     def save_metrics(self, side, param, test_date, dfs, sheet_name, stack_row=False):
         os.makedirs(f'{self.data_folder}\\{side}_{param}', exist_ok=True)
