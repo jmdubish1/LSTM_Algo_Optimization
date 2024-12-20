@@ -86,10 +86,13 @@ class ClassLstmModel:
         class_weight_dict = {idx: weight for idx, weight in enumerate(class_weights)}
         class_weight_print = {label: weight for label, weight, in zip(label_to_index.keys(), class_weights)}
 
-        for key, val in class_weight_dict.items():
-            if class_weight_dict[key] == class_weight_print['lg_win']:
-                class_weight_dict[key] = class_weight_print['lg_win'] * 1.15
-                class_weight_print['lg_win'] = class_weight_print['lg_win'] * 1.15
+        # for key, val in class_weight_dict.items():
+        #     if class_weight_dict[key] == class_weight_print['lg_win']:
+        #         class_weight_dict[key] = class_weight_print['lg_win'] * 1.15
+        #         class_weight_print['lg_win'] = class_weight_print['lg_win'] * 1.15
+            # if class_weight_dict[key] == class_weight_print['lg_loss']:
+            #     class_weight_dict[key] = class_weight_print['lg_loss'] * 1.05
+            #     class_weight_print['lg_loss'] = class_weight_print['lg_loss'] * 1.05
 
         print(f'Class Weights: {class_weight_print}\n')
         return class_weight_dict
@@ -113,9 +116,9 @@ class ClassLstmModel:
         #                                  verbose=2)
         self.model_plot = LivePlotLossesMDN(plot_live=self.lstm_dict['plot_live'])
 
-        train_gen = glt.BufferedBatchSequence(self.ph, self.buffer, train=True, randomize=randomize_tf)
-        # train_gen = train_gen.load_full_dataset()
-        test_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=False, randomize=randomize_tf)
+        train_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=True, randomize=randomize_tf)
+        train_gen = train_gen.generate_tf_dataset()
+        test_gen = glt.BufferedBatchGenerator(self.ph, self.buffer, train=False)
         test_gen = test_gen.load_full_dataset()
 
         stop_at_accuracy = StopAtAccuracy(accuracy_threshold=acc_threshold)
@@ -127,7 +130,7 @@ class ClassLstmModel:
                        verbose=1,
                        validation_data=test_gen,
                        callbacks=[one_cyc_lr, self.model_plot, stop_at_accuracy],
-                       shuffle=False,
+                       batch_size=self.batch_s,
                        class_weight=class_weights)
         self.model_plot.save_plot(self.ph.save_handler.data_folder, self.ph.paramset_id)
 
@@ -137,9 +140,8 @@ class ClassLstmModel:
 
         self.model = Model(inputs=[self.input_layer_daily, self.input_layer_intraday],
                            outputs=self.win_loss_output)
-        penalty_cat_crossentropy = penalized_categorical_crossentropy(self.penalty_matrix)
         self.model.compile(optimizer=self.optimizer,
-                           loss=penalty_cat_crossentropy)
+                           loss='categorical_crossentropy')
 
         print('New Model Created')
         self.get_model_summary_df()
@@ -149,22 +151,22 @@ class ClassLstmModel:
         self.input_layer_daily = Input(self.input_shapes[0],
                                        name='daily_input_layer')
 
-        lstm_d1 = LSTM(units=96,
+        lstm_d1 = LSTM(units=80,
                        activation='tanh',
                        recurrent_activation='sigmoid',
                        return_sequences=True,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.01),
+                       kernel_regularizer=l2(0.02),
                        name='lstm_d1')(self.input_layer_daily)
 
         drop_d1 = Dropout(0.05, name='drop_d1')(lstm_d1)
 
-        lstm_d2 = LSTM(units=48,
+        lstm_d2 = LSTM(units=64,
                        activation='tanh',
                        recurrent_activation='sigmoid',
                        return_sequences=False,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.01),
+                       kernel_regularizer=l2(0.02),
                        name='lstm_d2')(drop_d1)
 
         self.input_layer_intraday = Input(self.input_shapes[1],
@@ -175,7 +177,7 @@ class ClassLstmModel:
                        recurrent_activation='sigmoid',
                        return_sequences=True,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.01),
+                       kernel_regularizer=l2(0.02),
                        name='lstm_i1')(self.input_layer_intraday)
 
         drop_i1 = Dropout(0.05, name='drop_i1')(lstm_i1)
@@ -185,7 +187,7 @@ class ClassLstmModel:
                        recurrent_activation='sigmoid',
                        return_sequences=False,
                        kernel_initializer=GlorotUniform(),
-                       kernel_regularizer=l2(0.01),
+                       kernel_regularizer=l2(0.02),
                        name='lstm_i2')(drop_i1)
 
         merged_lstm = Concatenate(axis=-1,
@@ -194,7 +196,8 @@ class ClassLstmModel:
         dense_m1 = Dense(units=self.lstm_dict['dense_m1_nodes'],
                          activation='sigmoid',
                          kernel_initializer=GlorotUniform(),
-                         kernel_regularizer=l2(0.01),
+                         kernel_regularizer=l2(0.025),
+                         # kernel_regularizer=L1L2(l1=.002, l2=.02),
                          name='dense_m1')(merged_lstm)
 
         drop_i1 = Dropout(0.05, name='drop_m1')(dense_m1)
@@ -202,12 +205,12 @@ class ClassLstmModel:
         dense_wl1 = Dense(units=self.lstm_dict['dense_wl1_nodes'],
                           activation='sigmoid',
                           kernel_initializer=GlorotUniform(),
-                          kernel_regularizer=l2(0.01),
+                          kernel_regularizer=l2(0.025),
                           name='dense_wl1')(drop_i1)
 
         # Output layers
         self.win_loss_output = Dense(self.ph.setup_params.num_y_cols,
-                                     activation='softmax',
+                                     activation='sigmoid',
                                      name='wl_class')(dense_wl1)
 
     def get_model_summary_df(self, printft=False):

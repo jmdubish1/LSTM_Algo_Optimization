@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import gc
 import os
 import pandas as pd
 from datetime import timedelta
@@ -6,6 +8,8 @@ import data_tools.general_tools as gt
 import cProfile
 import pstats
 import io
+import tensorflow as tf
+from numba import cuda
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -141,4 +145,15 @@ class ProcessHandler:
         self.save_handler.save_model(ind)
         self.save_handler.save_scalers()
 
+    def reset_gpu_memory(self):
+        try:
+            tf.keras.backend.clear_session()
+            gc.collect()
+
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+            print("GPU memory reset successfully.")
+        except Exception as e:
+            print(f"Error during GPU memory reset: {e}")
 

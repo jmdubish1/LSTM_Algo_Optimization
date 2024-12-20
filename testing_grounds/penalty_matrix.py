@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 
 
-file_fold = r'C:\Users\jmdub\Documents\Trading\Futures\Strategy Info\Double_Candles\ATR\NQ\15min\15min_test_20years'
-file_loc = f'{file_fold}\\NQ_15min_Double_Candle_289_trades.feather'
+# file_fold = r'C:\Users\jmdub\Documents\Trading\Futures\Strategy Info\Double_Candles\ATR\NQ\15min\15min_test_20years'
+# file_loc = f'{file_fold}\\NQ_15min_Double_Candle_289_trades.feather'
 
 
 def set_pnl(df):
@@ -59,10 +59,10 @@ def compute_penalty_matrix(df, classes):
     return p_matrix
 
 
-trade_df = pd.read_feather(f'{file_loc}')
-trade_df = set_pnl(trade_df)
-trade_df = set_labels(trade_df, 'Bull', 20, 25)
-classes = ['lg_loss', 'skip', 'lg_win']
-p_mat = compute_penalty_matrix(trade_df, classes)
-print(p_mat)
+# trade_df = pd.read_feather(f'{file_loc}')
+# trade_df = set_pnl(trade_df)
+# trade_df = set_labels(trade_df, 'Bull', 20, 25)
+# classes = ['lg_loss', 'skip', 'lg_win']
+# p_mat = compute_penalty_matrix(trade_df, classes)
+# print(p_mat)
 

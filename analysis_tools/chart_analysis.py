@@ -73,9 +73,9 @@ def plot_rolling_sum(df, sheet_name, param_id, f_path):
         rolling_df = df.copy()
         rolling_df['DateTime'] = pd.to_datetime(rolling_df['DateTime'], errors='coerce', unit='ns')
         rolling_df = rolling_df.sort_values(by='DateTime').reset_index(drop=True)
-        rolling_df['PnL_algo_tot'] = rolling_df['PnL_algo_tot'].cumsum()
-        rolling_df['PnL_one_dir_tot'] = rolling_df['PnL_one_dir_tot'].cumsum()
-        rolling_df['PnL_two_dir_tot'] = rolling_df['PnL_two_dir_tot'].cumsum()
+        rolling_df['PnL_algo_tot'] = rolling_df['PnL'].cumsum()
+        rolling_df['PnL_one_dir_tot'] = rolling_df['PnL_one_dir'].cumsum()
+        rolling_df['PnL_two_dir_tot'] = rolling_df['PnL_two_dir'].cumsum()
 
         rolling_df['Maxdraw_algo'] = mt.calculate_max_drawdown(rolling_df['PnL_algo_tot'])
         rolling_df['Maxdraw_one_dir'] = mt.calculate_max_drawdown(rolling_df['PnL_one_dir_tot'])
@@ -84,7 +84,7 @@ def plot_rolling_sum(df, sheet_name, param_id, f_path):
         adj_one_dir_pnl = (rolling_df['PnL_one_dir_tot'].values *
                            create_lever_ratio(rolling_df['Maxdraw_one_dir'].values,
                                               rolling_df['Maxdraw_algo'].values,
-                                              lookback=50,
+                                              lookback=10,
                                               max_lever=5))
         adj_two_dir_pnl = (rolling_df['PnL_two_dir_tot'].values *
                            create_lever_ratio(rolling_df['Maxdraw_two_dir'].values,
@@ -93,7 +93,7 @@ def plot_rolling_sum(df, sheet_name, param_id, f_path):
                                               max_lever=5))
 
         # Create subplots
-        fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 20))
+        fig, axes = plt.subplots(3, 1, sharex=False, figsize=(12, 20))
 
         # PnL plot
         axes[0].plot(rolling_df['DateTime'], rolling_df["PnL_algo_tot"], label="Algo PnL Tot", color='darkred')
@@ -120,10 +120,9 @@ def plot_rolling_sum(df, sheet_name, param_id, f_path):
         axes[2].grid(True)
 
         # Apply x-axis formatting to the entire figure
-        fig.autofmt_xdate()
-
-        # Set shared x-axis label
-        axes[-1].set_xlabel("Date")
+        for ax in axes:
+            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y-%m-%d'))
+            ax.tick_params(axis='x', rotation=45)
 
         # Save Excel file
         excel_path = os.path.join(f_path, f"{sheet_name}_{param_id}_total.xlsx")

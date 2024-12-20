@@ -75,7 +75,7 @@ class SaveHandler:
 
             self.ph.lstm_model.model = (
                 keras.models.load_model(f'{model_path}',
-                                        custom_objects={'loss_fn': penalty_cat_crossentropy}))
+                                        custom_objects={'penalized_crossentropy_loss': penalty_cat_crossentropy}))
             self.ph.lstm_model.model.load_weights(f'{model_path}')
 
     def load_prior_test_date_model(self):
@@ -128,15 +128,18 @@ class SaveHandler:
         else:
             pass
 
-    def save_all_prediction_data(self, test_date, model_dfs):
+    def save_all_prediction_data(self, test_date, model_dfs, include_small_tf):
         self.save_metrics(self.ph.side, self.ph.paramset_id, test_date, model_dfs[1], 'Model')
-        self.save_metrics(self.ph.side, self.ph.paramset_id, test_date, model_dfs[0], 'PnL')
+        self.save_metrics(self.ph.side, self.ph.paramset_id, test_date, model_dfs[0], 'PnL', include_small_tf)
         if self.ph.train_modeltf and not self.ph.retraintf:
             self.save_plot_to_excel(self.ph.side)
 
-    def save_metrics(self, side, param, test_date, dfs, sheet_name, stack_row=False):
+    def save_metrics(self, side, param, test_date, dfs, sheet_name, stack_row=False, include_small_tf=False):
         os.makedirs(f'{self.data_folder}\\{side}_{param}', exist_ok=True)
-        self.save_file = f'{self.data_folder}\\{side}_{param}\\predictions_{side}_{param}_{test_date}.xlsx'
+        if include_small_tf:
+            self.save_file = f'{self.data_folder}\\{side}_{param}\\predictions_{side}_{param}_{test_date}_small.xlsx'
+        else:
+            self.save_file = f'{self.data_folder}\\{side}_{param}\\predictions_{side}_{param}_{test_date}.xlsx'
         sheet_name = f'{side}_{sheet_name}'
 
         if os.path.exists(self.save_file):

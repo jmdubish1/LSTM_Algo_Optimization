@@ -3,11 +3,13 @@ import numpy as np
 import data_tools.general_tools as gt
 import data_tools.math_tools as mt
 import warnings
-from fracdiff import fdiff
+from fracdiff.sklearn import Fracdiff
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nn_tools.process_handler import ProcessHandler
+
+pd.set_option('display.max_columns', 500)
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -81,8 +83,8 @@ class MktDataWorking:
             self.get_intra_ema()
 
         for sec in self.ph.mkt_setup.all_secs:
-            df[f'{sec}_ATR_fast'] = mt.create_atr(df, sec, n=4)
-            df[f'{sec}_ATR_slow'] = mt.create_atr(df, sec, n=8)
+            df[f'{sec}_ATR_fast'] = build_atr(df, sec, 6)
+            df[f'{sec}_ATR_slow'] = build_atr(df, sec, 10)
             df[f'{sec}_RSI_k'], df[f'{sec}_RSI_d'] = mt.create_smooth_rsi(df[f'{sec}_Close'], self.fastema)
 
             df = prep_ema(df, sec, self.fastema)
@@ -90,6 +92,8 @@ class MktDataWorking:
             df = self.frac_diff(df, sec)
             df = mt.garch_modeling(df, sec)
 
+        # print(df.iloc[500:506, :])
+        # breakpoint()
         df = mt.encode_time_features(df, time_frame)
         df = gt.fill_na_inf(df)
 
@@ -99,18 +103,24 @@ class MktDataWorking:
             self.intra_working = df
 
     def frac_diff(self, df, sec):
-        for met in ['Open', 'High', 'Low', 'Close', 'Vol']:
+        print(f'{sec}...Fractionally Differentiating')
+        for met in ['Close', 'Vol']:
             d_val, ws = self.get_frac_diff_params(met, sec)
+            ws = min(ws, 90)
 
-            ws = min(ws, 450)
-            arr = pd.Series(df[f'{sec}_{met}']).fillna(method='ffill').dropna().values
-            out_arr = fdiff(arr, d_val, window=ws, mode='same')
-            out_arr = mt.subset_to_first_nonzero(out_arr)
-            padding = len(arr) - len(out_arr)
-            out_arr = out_arr[~np.isnan(out_arr)]
-            out_arr = np.pad(out_arr, (padding, 0), constant_values=0)
+            if met == 'Close':
+                fracdiff_model = Fracdiff(d=d_val, window=ws)
+                fracdiff_model.fit(df[f'{sec}_Close'])
 
-            df[f'{sec}_{met}'] = out_arr
+                diff_close = fracdiff_model.transform(df[f'{sec}_Close'].to_frame()).squeeze()
+                df[f'{sec}_Open'] = (df[f'{sec}_Open'] / df[f'{sec}_Close']) * diff_close
+                df[f'{sec}_High'] = (df[f'{sec}_High'] / df[f'{sec}_Close']) * diff_close
+                df[f'{sec}_Low'] = (df[f'{sec}_Low'] / df[f'{sec}_Close']) * diff_close
+                df[f'{sec}_Close'] = diff_close
+
+            else:
+                fracdiff_model = Fracdiff(d=d_val, window=ws)
+                df[f'{sec}_{met}'] = fracdiff_model.fit_transform(df[f'{sec}_Vol'].to_frame())
 
         return df
 
@@ -150,12 +160,18 @@ class MktDataWorking:
 
 def prep_ema(df, sec, ema_len):
     df[f'{sec}_EMA_{ema_len}'] = mt.calculate_ema_numba(df, f'{sec}_Close', ema_len)
-    df[f'{sec}_EMA_Close_{ema_len}'] = (df[f'{sec}_Close'] - df[f'{sec}_EMA_{ema_len}']) / df[f'{sec}_Close'] * 100
     df[f'{sec}_EMA_{ema_len}'] = mt.standardize_ema(df[f'{sec}_EMA_{ema_len}'], ema_len)
+    df[f'{sec}_EMA_Close_{ema_len}'] = (df[f'{sec}_Close'] - df[f'{sec}_EMA_{ema_len}']) / df[f'{sec}_Close']
 
     return df
 
 
+def build_atr(df, sec, speed):
+    atr_arr = mt.create_atr(df, sec, n=speed)
+    atr_arr = np.nan_to_num(atr_arr, 1)
+    atr_arr = atr_arr/df[f'{sec}_Close']
+
+    return atr_arr
 
 
 

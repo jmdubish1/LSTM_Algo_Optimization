@@ -46,9 +46,11 @@ class TradeData:
         print('\nGetting Trade Data')
         self.set_feather_loc()
         self.trade_df = pd.read_feather(f'{self.data_loc}\\{self.ph.setup_params.security}_'
-                                        f'{self.ph.setup_params.time_frame_test}_Double_Candle_289_trades.feather')
+                                        f'{self.ph.setup_params.time_frame_test}_Double_Candle_'
+                                        f'{self.ph.setup_params.total_param_sets}_trades.feather')
         self.param_df = pd.read_feather(f'{self.data_loc}\\{self.ph.setup_params.security}_'
-                                        f'{self.ph.setup_params.time_frame_test}_Double_Candle_289_params.feather')
+                                        f'{self.ph.setup_params.time_frame_test}_Double_Candle_'
+                                        f'{self.ph.setup_params.total_param_sets}_params.feather')
         self.trade_df['DateTime'] = gt.adjust_datetime(self.trade_df['DateTime'])
         self.trade_df = (
             self.trade_df)[self.trade_df['DateTime'].dt.date >=
@@ -71,6 +73,8 @@ class TradeData:
         self.working_df['Label'] = np.empty(len(self.working_df), dtype=object)
 
         temp_df = self.working_df[self.working_df['DateTime'] <= self.start_period_test_date]
+        print(temp_df)
+        breakpoint()
         pnl_arr = temp_df['PnL'].values
         pnl_arr = clip_array(pnl_arr, 5, 95)
         threshold_low = -find_percentile_for_percent_sum(-pnl_arr[pnl_arr < 0], low_percentile)

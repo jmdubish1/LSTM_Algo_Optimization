@@ -54,18 +54,17 @@ class ModelOutputData:
 
     def agg_prediction_data(self):
         pred_arr = np.array(self.model_metrics['probability_preds'])
-        # pred_arr = np.mean(pred_arr, axis=0)
         num_class = pred_arr.shape[2]
         pred_arr = np.argmax(pred_arr, axis=2)
         pred_arr = np.eye(num_class)[pred_arr]
-        # pred_arr = pred_arr / pred_arr.sum(axis=2, keepdims=True)
         pred_arr = np.mean(pred_arr, axis=0)
+        # print(pred_arr)
         self.model_metrics['probability_preds'] = pred_arr
 
-    def prediction_analysis(self):
+    def prediction_analysis(self, include_small_tf=False):
         labeled_preds = self.model_metrics['labeled_preds']
         anal_df = self.ph.trade_data.analysis_df.copy(deep=True)
-        anal_df = build_analysis_df(anal_df, labeled_preds)
+        anal_df = build_analysis_df(anal_df, labeled_preds, include_small_tf)
         one_dir_algo_stats = lstm_trade_stats(anal_df, pred_data=False, two_dir=False)
         one_dir_pred_stats = lstm_trade_stats(anal_df, pred_data=True, two_dir=False)
         two_dir_pred_stats = lstm_trade_stats(anal_df, pred_data=True, two_dir=True)
@@ -75,7 +74,7 @@ class ModelOutputData:
         return predicted_trade_data
 
 
-def build_analysis_df(df, labeled_preds):
+def build_analysis_df(df, labeled_preds, include_small_tf=False):
     df = df.iloc[-len(labeled_preds):]
     df['Lstm_label'] = labeled_preds
 
@@ -86,13 +85,31 @@ def build_analysis_df(df, labeled_preds):
     df['PnL_one_dir_tot'] = df['PnL_one_dir'].cumsum()
     df['Maxdraw_one_dir'] = mt.calculate_max_drawdown(df['PnL_one_dir_tot'])
 
-    df['PnL_two_dir'] = 0
-    df['PnL_two_dir'] = df.apply(
-        lambda row: row['PnL'] if row['Lstm_label'] == 'lg_win' else
-        -row['PnL'] if row['Lstm_label'] == 'lg_loss' else 0,
-        axis=1)
+    if include_small_tf:
+        df['PnL_one_dir'] = df['PnL'].where((df['Lstm_label'] == 'lg_win') | (df['Lstm_label'] == 'sm_win'), 0)
+        df['PnL_one_dir_tot'] = df['PnL_one_dir'].cumsum()
+        df['Maxdraw_one_dir'] = mt.calculate_max_drawdown(df['PnL_one_dir_tot'])
+
+        df['PnL_two_dir'] = 0
+        df['PnL_two_dir'] = df.apply(
+            lambda row: row['PnL'] if (row['Lstm_label'] == 'lg_win') or (row['Lstm_label'] == 'sm_win') else
+            -row['PnL'] if (row['Lstm_label'] == 'lg_loss') or (row['Lstm_label'] == 'sm_loss') else 0,
+            axis=1)
+    else:
+        df['PnL_one_dir'] = df['PnL'].where(df['Lstm_label'] == 'lg_win', 0)
+        df['PnL_one_dir_tot'] = df['PnL_one_dir'].cumsum()
+        df['Maxdraw_one_dir'] = mt.calculate_max_drawdown(df['PnL_one_dir_tot'])
+
+        df['PnL_two_dir'] = 0
+        df['PnL_two_dir'] = df.apply(
+            lambda row: row['PnL'] if row['Lstm_label'] == 'lg_win' else
+            -row['PnL'] if row['Lstm_label'] == 'lg_loss' else 0,
+            axis=1)
+
     df['PnL_two_dir_tot'] = df['PnL_two_dir'].cumsum()
     df['Maxdraw_two_dir'] = mt.calculate_max_drawdown(df['PnL_two_dir'])
+
+    df.drop(columns='Label', inplace=True)
 
     return df
 
@@ -164,9 +181,10 @@ def lstm_trade_stats(df, pred_data=True, two_dir=True):
     if two_dir and pred_data:
         if not 'skip' in results.keys():
             for key in ['lg_loss', 'sm_loss']:
-                for metric in ['total_pnl', 'avg_trade', 'expected_value']:
-                    if results[key][metric] != 0:
-                        results[key][metric] = -results[key][metric]
+                if key in results.keys():
+                    for metric in ['total_pnl', 'avg_trade', 'expected_value']:
+                        if results[key][metric] != 0:
+                            results[key][metric] = -results[key][metric]
                 avg_win = results[key]['avg_win']
                 results[key]['avg_win'] = -results[key]['avg_loss']
                 results[key]['avg_loss'] = -avg_win

@@ -40,8 +40,8 @@ class AllocationMetrics:
         self.strat_main = (f'{self.trade_dat_loc}\\{self.setup_dict["security"]}\\{self.setup_dict["time_frame"]}\\'
                            f'{self.setup_dict["time_frame"]}_test_{self.setup_dict["time_length"]}')
         self.model_dat_folder = f'{self.strat_main}\\{self.setup_dict["side"]}\\Data'
-        self.trades_file = f'{self.strat_main}\\NQ_15min_Double_Candle_289_trades.feather'
-        self.params_file = f'{self.strat_main}\\NQ_15min_Double_Candle_289_params.feather'
+        self.trades_file = f'{self.strat_main}\\NQ_15min_Double_Candle_1945_trades.feather'
+        self.params_file = f'{self.strat_main}\\NQ_15min_Double_Candle_1945_params.feather'
         self.side = setup_dict['side']
         self.models_to_test = []
         self.params_to_test = []

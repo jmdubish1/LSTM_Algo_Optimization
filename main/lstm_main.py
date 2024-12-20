@@ -25,7 +25,7 @@ setup_dict = {
     'model_type': 'classification_lstm',
     'strategy': 'Double_Candle',
     'security': 'NQ',
-    'other_securities': [],  #['RTY', 'YM', 'ES'],  #, 'GC', 'CL'],
+    'other_securities': ['RTY', 'YM', 'ES'],  #, 'GC', 'CL'],
     'sides': ['Bull'],
     'time_frame_test': '15min',
     'time_frame_train': '15min',
@@ -39,29 +39,29 @@ setup_dict = {
     'test_period_days': 7*13,
     'years_to_train': 3,
     'sample_percent': 1,
-    'total_param_sets': 289,
-    'chosen_params': {'Bull': [104, 108, 12, 120, 14, 188, 234, 24, 252, 44, 92],
-                      'Bear': [100, 118, 124, 160, 26, 32, 34, 40, 74]},
-    'percentiles': {'loss': 40,
+    'total_param_sets': 'EvenMoney',
+    'chosen_params': {'Bull': [1753, 1822],
+                      'Bear': []},
+    'percentiles': {'loss': 45,
                     'win': 50},
     'classes': ['lg_loss', 'sm_loss', 'sm_win', 'lg_win']
 }
 
 lstm_model_dict = {
-    'intra_lookback': 18,
+    'intra_lookback': 16,
     'daily_lookback': 18,
     'plot_live': True,
-    'epochs': {'Bull': 65,
-               'Bear': 65},
+    'epochs': {'Bull': 55,
+               'Bear': 80},
     'batch_size': 16,
-    'buffer_batch_num': 100,  # Exact number of trades to pull at once
+    'buffer_batch_num': 500,  # Exact number of trades to pull at once
     'max_accuracy': .5,
-    'lstm_i1_nodes': 512,
+    'lstm_i1_nodes': 384,
     'lstm_i2_nodes': 256,
-    'dense_m1_nodes': 384,
-    'dense_wl1_nodes': 112,
-    'dense_pl1_nodes': 112,
-    'adam_optimizer': .00005,
+    'dense_m1_nodes': 256,
+    'dense_wl1_nodes': 192,
+    'dense_pl1_nodes': 160,
+    'adam_optimizer': .00002,
     'prediction_runs': 50,
     'opt_threshold': {'Bull': .50,
                       'Bear': .50},
@@ -87,13 +87,13 @@ def main():
     MktDataSetup(ph)
     save_handler = SaveHandler(ph)
     param_chooser = AlgoParamResults(ph)
-    param_chooser.run_param_chooser()
+    param_chooser.run_param_chooser(even_money=True)
 
     for ph.side in setup_dict['sides']:
         trade_data = TradeData(ph)
         valid_params = param_chooser.valid_param_list(train_bad_params)
 
-        for ph.paramset_id in valid_params:
+        for ph.paramset_id in [911]:
             print(f'Working Paramset: {ph.paramset_id}')
             MktDataWorking(ph)
             if ph.setup_params.model_type == 'classification_lstm':
@@ -117,15 +117,18 @@ def main():
                 ph.decide_load_prior_model()
                 load_scalers = ph.decide_load_scalers()
 
-                if ph.train_modeltf:
+                if ph.train_modeltf or predict_tf:
                     lstm_data.prep_train_test_data(load_scalers, train_dict['over_sample_y'])
-                    param_chooser.adj_lstm_training_nodes()
-                    ph.ph_train_model(ind, train_dict['over_sample_y'])
+                    param_chooser.adj_lstm_training_nodes(ind, model_increase=.10)
+                    if ph.train_modeltf:
+                        ph.ph_train_model(ind, train_dict['over_sample_y'])
 
+                    ph.save_handler.load_current_test_date_model()
                     model_output_data = ModelOutputData(ph)
                     model_output_data.predict_data()
-                    predicted_data = model_output_data.prediction_analysis()
-                    save_handler.save_all_prediction_data(test_date, predicted_data)
+                    predicted_data = model_output_data.prediction_analysis(include_small_tf=True)
+                    save_handler.save_all_prediction_data(test_date, predicted_data, include_small_tf=True)
+                    ph.reset_gpu_memory()
                     # breakpoint()
 
 
